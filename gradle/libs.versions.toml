@@ -1,0 +1,16 @@
+# Version catalog — SATU sumber versi utk seluruh repo.
+# Bump versi = edit file INI saja (lihat CLAUDE.md / maintenance).
+[versions]
+kotlin = "2.4.0"
+springBoot = "4.1.0"
+springDependencyManagement = "1.1.7"
+# agp = "9.2.0"   # Android Gradle Plugin — diaktifkan saat fase client (modul android pertama)
+
+[libraries]
+# Artefak plugin utk convention plugins (dipakai di build-logic/, bukan modul biasa).
+kotlin-gradlePlugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
+kotlin-allopen = { module = "org.jetbrains.kotlin:kotlin-allopen", version.ref = "kotlin" }
+springBoot-gradlePlugin = { module = "org.springframework.boot:spring-boot-gradle-plugin", version.ref = "springBoot" }
+springDependencyManagement-gradlePlugin = { module = "io.spring.gradle:dependency-management-plugin", version.ref = "springDependencyManagement" }
+
+# Dependency runtime modul diisi per-task saat dibutuhkan.

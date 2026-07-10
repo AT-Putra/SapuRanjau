@@ -1,0 +1,49 @@
+# --- Build / tooling ---
+.gradle/
+build/
+**/build/
+!src/**/build/
+.kotlin/
+local.properties
+*.apk
+*.aab
+
+# --- Secrets / kredensial ---
+*.env
+.env
+.env.*
+.envrc
+secrets/
+*-secret.*
+*secret*.yml
+*secret*.yaml
+application-local*.yml
+application-local*.yaml
+serviceAccountKey*.json
+google-services.json
+credentials*.json
+*.pem
+*.key
+*.p12
+*.pfx
+*.keystore
+*.jks
+id_rsa
+id_ed25519
+
+# --- Output tooling lokal ---
+graphify-out/
+.mcp.json
+cclsp.json
+
+# --- IDE / OS ---
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.DS_Store
+Thumbs.db
+
+# --- Claude Code local ---
+.claude/settings.local.json

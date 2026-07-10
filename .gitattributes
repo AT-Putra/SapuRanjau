@@ -1,0 +1,18 @@
+# Normalisasi: teks = LF di repo, checkout ikut OS. Cegah churn CRLF/LF.
+* text=auto eol=lf
+
+# Skrip wrapper WAJIB LF (kalau CRLF → gagal jalan di Unix/CI)
+gradlew text eol=lf
+*.sh text eol=lf
+
+# Skrip/berkas khusus Windows = CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Biner — jangan diutak-atik
+*.jar binary
+*.png binary
+*.jpg binary
+*.webp binary
+*.keystore binary
+*.jks binary
