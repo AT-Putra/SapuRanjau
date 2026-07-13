@@ -5,7 +5,7 @@ This project has a knowledge graph at graphify-out/ with god nodes, community st
 Rules:
 - For questions about the project (architecture, decisions, "what depends on X", "why was Y decided", how concepts/entities/modules relate), **first run `graphify query "<question>"`** when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than reading every doc.
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
-- **Keep the graph current: after any change to `docs/**`, `README.md`, `AGENTS.md`, or `RELEASE.md` (new/changed ADR, entity, module, concept), run `/graphify --update`** to re-extract changed files into the graph. This is a doc corpus → update re-runs semantic extraction on the changed files (the agent performs it; no Gemini key set). Do this as the last step after a docs/ADR editing session, same discipline as syncing `06`.
+- **Keep the graph current: after any change to `docs/**`, `README.md`, `AGENTS.md`, or `RELEASE.md` (new/changed ADR, entity, module, concept), run `/graphify --update`** to re-extract changed files into the graph. This is a doc corpus → update re-runs semantic extraction on the changed files. `GEMINI_API_KEY` is set and validated (model `gemini-3-flash-preview`), so extraction runs via Gemini (`backend="gemini"`), not subagents. Do this as the last step after a docs/ADR editing session, same discipline as syncing `06`.
 
 ## Kotlin LSP (cclsp)
 

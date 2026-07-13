@@ -8,3 +8,11 @@ kotlin {
     // Build reproducible: pakai JDK 21 apa pun JDK yang terpasang di mesin dev.
     jvmToolchain(21)
 }
+
+dependencies {
+    "testImplementation"(kotlin("test"))
+}
+
+tasks.withType<Test>().configureEach {
+    useJUnitPlatform()
+}
