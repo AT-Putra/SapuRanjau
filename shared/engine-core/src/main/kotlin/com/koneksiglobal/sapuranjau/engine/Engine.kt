@@ -1,8 +1,8 @@
 package com.koneksiglobal.sapuranjau.engine
 
 // engine-core — kontrak RATIFIED (05_CONTRACTS §1, ADR-0032). Deterministik, tanpa I/O.
-// T-010 mengisi: model Board + reveal/flood-fill. generate no-guess = T-011,
-// chord + toggleFlag = T-012, solver (isSolvableNoGuess/computeParMoves) = T-011.
+// T-010: model Board + reveal/flood-fill. T-012: toggleFlag + chord (ADR-0019).
+// generate no-guess & solver (isSolvableNoGuess/computeParMoves) = T-011.
 
 data class LevelConfig(
     val gridWidth: Int,
@@ -20,8 +20,12 @@ class Board internal constructor(
     val config: LevelConfig,
     val seed: Long,
     internal val mines: Set<CellIndex>,
+    // Klik-pertama tempat board diwujudkan (ADR-0031) = titik mulai kanonik solver/par.
+    // null utk board rakitan-test → fallback ke sel-0 terkecil (NoGuess.kt).
+    internal val firstClick: CellIndex? = null,
 ) {
     internal val revealed: MutableSet<CellIndex> = HashSet()
+    internal val flags: MutableSet<CellIndex> = HashSet()
 
     internal val safeCellCount: Int = config.gridWidth * config.gridHeight - mines.size
 }
@@ -49,53 +53,76 @@ class MinesweeperEngine : GameEngine {
         require(board.inBounds(at)) { "cell $at di luar grid ${board.config.gridWidth}x${board.config.gridHeight}" }
         if (at in board.mines) return RevealResult.HitMine(at)
 
-        // Flood-fill iteratif: buka `at`, dan bila 0 tetangga-bom, sebarkan ke tetangganya.
-        // Set hasil deterministik apa pun urutan traversal; list-nya diurutkan (y,x) agar
-        // client & server (ADR-0003) menghasilkan urutan identik.
         val opened = ArrayList<RevealedCell>()
-        val stack = ArrayDeque<CellIndex>()
-        stack.addLast(at)
-        while (stack.isNotEmpty()) {
-            val c = stack.removeLast()
-            if (!board.revealed.add(c)) continue // sudah terbuka
-            val adj = board.adjacentMines(c)
-            opened += RevealedCell(c, adj)
-            if (adj == 0) {
-                for (n in board.neighbors(c)) {
-                    if (n !in board.revealed && n !in board.mines) stack.addLast(n)
-                }
-            }
-        }
-        opened.sortWith(compareBy({ it.index.y }, { it.index.x }))
-
-        return if (board.revealed.size == board.safeCellCount) {
-            RevealResult.LevelCleared(opened)
-        } else {
-            RevealResult.Revealed(opened)
-        }
+        board.floodFrom(at, opened)
+        return board.result(opened)
     }
 
-    // ponytail: stub jalur-task berikutnya, bukan lupa. Impl per task yang disebut.
+    override fun toggleFlag(board: Board, at: CellIndex): Board {
+        require(board.inBounds(at)) { "cell $at di luar grid ${board.config.gridWidth}x${board.config.gridHeight}" }
+        // Flag gratis-langkah (ADR-0018), toggle in-place. Sel terbuka tak bisa ditandai.
+        if (at in board.revealed) return board
+        if (!board.flags.add(at)) board.flags.remove(at) // sudah ada → lepas
+        return board
+    }
+
+    // Chord (ADR-0019): tap angka terbuka yang jumlah flag tetangganya = angkanya →
+    // buka semua tetangga tak-berflag. Flag salah (bom tak diflag) → meledak. = 1 langkah.
+    override fun chord(board: Board, at: CellIndex): RevealResult {
+        require(board.inBounds(at)) { "cell $at di luar grid ${board.config.gridWidth}x${board.config.gridHeight}" }
+        if (at !in board.revealed) return RevealResult.Revealed(emptyList()) // chord hanya di sel terbuka
+        val nbrs = board.neighbors(at)
+        if (nbrs.count { it in board.flags } != board.adjacentMines(at)) {
+            return RevealResult.Revealed(emptyList()) // belum tuntas → no-op
+        }
+        val targets = nbrs.filter { it !in board.flags && it !in board.revealed }
+        // nbrs sudah urut (y,x) → bom pertama deterministik (ADR-0003).
+        targets.firstOrNull { it in board.mines }?.let { return RevealResult.HitMine(it) }
+        val opened = ArrayList<RevealedCell>()
+        for (t in targets) board.floodFrom(t, opened) // set revealed dedup tumpang-tindih cascade
+        return board.result(opened)
+    }
+
+    // T-011 — impl di NoGuess.kt (solver+generator+par berbagi satu mesin deduksi).
     override fun generate(config: LevelConfig, seed: Long, firstClick: CellIndex): Board =
-        TODO("T-011: generator no-guess (ADR-0031)")
-
-    override fun toggleFlag(board: Board, at: CellIndex): Board =
-        TODO("T-012: state flag (ADR-0019)")
-
-    override fun chord(board: Board, at: CellIndex): RevealResult =
-        TODO("T-012: chord (ADR-0019)")
+        generateNoGuess(config, seed, firstClick)
 
     override fun isSolvableNoGuess(board: Board): Boolean =
-        TODO("T-011: solver no-guess (ADR-0031)")
+        solveClears(board.freshCopy())
 
     override fun computeParMoves(board: Board): Int =
-        TODO("T-011: par = jalur bersih solver (ADR-0017)")
+        parPath(board.freshCopy())
 }
 
-private fun Board.inBounds(c: CellIndex): Boolean =
+// Flood-fill dari sel aman `from` (bukan bom): buka `from`, dan bila 0 tetangga-bom sebarkan.
+// Set `revealed` deterministik apa pun urutan traversal (ADR-0003); pengurutan list di result().
+// Dipakai reveal() & chord() → satu implementasi flood-fill.
+private fun Board.floodFrom(from: CellIndex, opened: MutableList<RevealedCell>) {
+    val stack = ArrayDeque<CellIndex>()
+    stack.addLast(from)
+    while (stack.isNotEmpty()) {
+        val c = stack.removeLast()
+        if (!revealed.add(c)) continue // sudah terbuka
+        val adj = adjacentMines(c)
+        opened += RevealedCell(c, adj)
+        if (adj == 0) for (n in neighbors(c)) {
+            if (n !in revealed && n !in mines) stack.addLast(n)
+        }
+    }
+}
+
+// List diurut (y,x) agar identik antar client/server (ADR-0003); Cleared saat semua sel aman terbuka.
+private fun Board.result(opened: MutableList<RevealedCell>): RevealResult {
+    opened.sortWith(compareBy({ it.index.y }, { it.index.x }))
+    return if (revealed.size == safeCellCount) RevealResult.LevelCleared(opened)
+    else RevealResult.Revealed(opened)
+}
+
+// internal (bukan private) → dipakai ulang NoGuess.kt (T-011).
+internal fun Board.inBounds(c: CellIndex): Boolean =
     c.x in 0 until config.gridWidth && c.y in 0 until config.gridHeight
 
-private fun Board.neighbors(c: CellIndex): List<CellIndex> {
+internal fun Board.neighbors(c: CellIndex): List<CellIndex> {
     val out = ArrayList<CellIndex>(8)
     for (dy in -1..1) for (dx in -1..1) {
         if (dx == 0 && dy == 0) continue
@@ -105,5 +132,5 @@ private fun Board.neighbors(c: CellIndex): List<CellIndex> {
     return out
 }
 
-private fun Board.adjacentMines(c: CellIndex): Int =
+internal fun Board.adjacentMines(c: CellIndex): Int =
     neighbors(c).count { it in mines }
