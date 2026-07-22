@@ -106,7 +106,12 @@ internal fun GameEngine.parPath(board: Board): Int {
             .filter { it !in board.revealed }
             .minWithOrNull(compareBy({ it.y }, { it.x }))
         if (target != null) { reveal(board, target); moves++; continue }
-        break // buntu → board bukan no-guess (tak terjadi utk board hasil generate)
+        break // buntu → deduksi tak bisa lanjut, dicek di bawah
+    }
+    // jangan diam-diam gagal (ADR-0031, konsisten dg generateNoGuess): par HANYA valid utk board
+    // no-guess. Board buntu (belum tuntas) → bug pemanggilan, bukan par salah yang di-ship diam-diam.
+    check(board.revealed.size == board.safeCellCount) {
+        "computeParMoves dipanggil pada board yang bukan no-guess-solvable (deduksi buntu setelah $moves langkah)"
     }
     return moves
 }

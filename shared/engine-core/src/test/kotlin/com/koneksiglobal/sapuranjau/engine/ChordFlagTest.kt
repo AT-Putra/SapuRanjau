@@ -59,6 +59,15 @@ class ChordFlagTest {
         assertEquals(RevealResult.HitMine(CellIndex(0, 0)), engine.chord(b, CellIndex(1, 1)))
     }
 
+    @Test fun revealCascadeDoesNotSweepFlaggedCell() {
+        // 5x1, bom di (4,0): (0,0)-(2,0) region "0" tersambung, (3,0) angka "1" (bukan "0").
+        val b = Board(LevelConfig(5, 1, 1), seed = 0L, mines = setOf(CellIndex(4, 0)))
+        engine.toggleFlag(b, CellIndex(3, 0))          // flag SALAH (sel aman), sebelum cascade
+        engine.reveal(b, CellIndex(0, 0))              // cascade dari region "0" tersambung
+        assertTrue(CellIndex(3, 0) in b.flags)         // flag tetap — TAK tersapu cascade
+        assertFalse(CellIndex(3, 0) in b.revealed)     // sel tetap tertutup
+    }
+
     @Test fun chordDeterministic() {
         fun run(): RevealResult {
             val b = board()

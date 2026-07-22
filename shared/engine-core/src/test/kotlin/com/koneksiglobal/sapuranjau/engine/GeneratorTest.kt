@@ -65,6 +65,12 @@ class GeneratorTest {
         assertFalse(engine.isSolvableNoGuess(b))
     }
 
+    @Test fun computeParMovesThrowsOnGuessyBoard() {
+        // sama seperti solverRejectsGuessyBoard: (3,0) terisolasi → deduksi buntu, bukan par palsu.
+        val b = Board(LevelConfig(4, 1, 1), 0L, setOf(CellIndex(2, 0)))
+        assertFailsWith<IllegalStateException> { engine.computeParMoves(b) }
+    }
+
     @Test fun generateThrowsOnImpossibleDensity() {
         // mineCount melebihi kapasitas (grid − zona aman 3x3) → bug kelayakan config (ADR-0031).
         assertFailsWith<IllegalArgumentException> {

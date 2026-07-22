@@ -97,6 +97,8 @@ class MinesweeperEngine : GameEngine {
 // Flood-fill dari sel aman `from` (bukan bom): buka `from`, dan bila 0 tetangga-bom sebarkan.
 // Set `revealed` deterministik apa pun urutan traversal (ADR-0003); pengurutan list di result().
 // Dipakai reveal() & chord() → satu implementasi flood-fill.
+// Sel berflag TAK pernah tersapu cascade (flag = "tidak membuka", 01_GDD.md) — konsisten dg
+// chord() yang juga mengecualikan tetangga berflag dari targetnya.
 private fun Board.floodFrom(from: CellIndex, opened: MutableList<RevealedCell>) {
     val stack = ArrayDeque<CellIndex>()
     stack.addLast(from)
@@ -106,7 +108,7 @@ private fun Board.floodFrom(from: CellIndex, opened: MutableList<RevealedCell>) 
         val adj = adjacentMines(c)
         opened += RevealedCell(c, adj)
         if (adj == 0) for (n in neighbors(c)) {
-            if (n !in revealed && n !in mines) stack.addLast(n)
+            if (n !in revealed && n !in mines && n !in flags) stack.addLast(n)
         }
     }
 }
