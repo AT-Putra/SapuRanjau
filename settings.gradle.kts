@@ -24,8 +24,9 @@ include(":shared:engine-core")
 include(":shared:scoring")
 // server/ — Spring Boot, modular monolith (ADR-0005 / ADR-0012)
 include(":server:app")
+include(":server:persistence")
 //
 // Ditambah per-task saat diklaim (docs/04_TASKS.md) — tiap penambahan = 1 baris + 1 build.gradle.kts 3-baris:
 //   shared:  contracts
-//   server:  persistence (T-020), api (T-021), game, lives, billing, tournament, audit, admin
+//   server:  api (T-021), game, lives, billing, tournament, audit, admin
 //   client:  app, ui-kit, data, feature-casual / -tournament / -wallet / -leaderboard  (fase client)

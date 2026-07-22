@@ -4,6 +4,9 @@
 kotlin = "2.4.0"
 springBoot = "4.1.0"
 springDependencyManagement = "1.1.7"
+flyway = "10.20.1"
+postgresql = "42.7.4"
+testcontainers = "1.21.3"
 # agp = "9.2.0"   # Android Gradle Plugin — diaktifkan saat fase client (modul android pertama)
 
 [libraries]
@@ -14,3 +17,8 @@ springBoot-gradlePlugin = { module = "org.springframework.boot:spring-boot-gradl
 springDependencyManagement-gradlePlugin = { module = "io.spring.gradle:dependency-management-plugin", version.ref = "springDependencyManagement" }
 
 # Dependency runtime modul diisi per-task saat dibutuhkan.
+flyway-core = { module = "org.flywaydb:flyway-core", version.ref = "flyway" }
+flyway-database-postgresql = { module = "org.flywaydb:flyway-database-postgresql", version.ref = "flyway" }
+postgresql = { module = "org.postgresql:postgresql", version.ref = "postgresql" }
+testcontainers-junit = { module = "org.testcontainers:junit-jupiter", version.ref = "testcontainers" }
+testcontainers-postgresql = { module = "org.testcontainers:postgresql", version.ref = "testcontainers" }
