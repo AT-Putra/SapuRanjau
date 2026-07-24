@@ -68,6 +68,17 @@ class ChordFlagTest {
         assertFalse(CellIndex(3, 0) in b.revealed)     // sel tetap tertutup
     }
 
+    @Test fun revealOnFlaggedCellIsNoOp() {
+        // reveal LANGSUNG di sel berflag = no-op (flag = "tidak membuka"), tak boleh buka +
+        // biarkan flag menempel (state flagged+revealed) yang meracuni hitung chord tetangga.
+        val b = Board(LevelConfig(5, 1, 1), seed = 0L, mines = setOf(CellIndex(4, 0)))
+        engine.toggleFlag(b, CellIndex(3, 0))                  // flag sel aman
+        val r = assertIs<RevealResult.Revealed>(engine.reveal(b, CellIndex(3, 0)))
+        assertTrue(r.cells.isEmpty())                          // tak ada yang terbuka
+        assertFalse(CellIndex(3, 0) in b.revealed)             // tetap tertutup
+        assertTrue(CellIndex(3, 0) in b.flags)                 // flag utuh
+    }
+
     @Test fun chordDeterministic() {
         fun run(): RevealResult {
             val b = board()

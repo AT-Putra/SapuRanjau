@@ -71,6 +71,13 @@ class GeneratorTest {
         assertFailsWith<IllegalStateException> { engine.computeParMoves(b) }
     }
 
+    @Test fun computeParMovesThrowsWhenNoCanonicalStart() {
+        // 2x1 bom di (0,0): satu-satunya sel aman (1,0) menyentuh bom → tak ada sel-0 → tak ada
+        // canonical start. Par tak terdefinisi → gagal eksplisit, bukan diam-diam return 0.
+        val b = Board(LevelConfig(2, 1, 1), 0L, setOf(CellIndex(0, 0)))
+        assertFailsWith<IllegalStateException> { engine.computeParMoves(b) }
+    }
+
     @Test fun generateThrowsOnImpossibleDensity() {
         // mineCount melebihi kapasitas (grid − zona aman 3x3) → bug kelayakan config (ADR-0031).
         assertFailsWith<IllegalArgumentException> {

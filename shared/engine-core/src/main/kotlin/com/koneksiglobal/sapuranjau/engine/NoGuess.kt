@@ -84,7 +84,10 @@ internal fun GameEngine.solveClears(board: Board): Boolean {
 // Par = panjang jalur bersih solver, chord-greedy deterministik (ADR-0017/0018/0019). 1 reveal=1,
 // chord=1, flag=0. Bukan minimum terbukti — greedy tetap tajam & sama utk semua papan. MEM-MUTASI.
 internal fun GameEngine.parPath(board: Board): Int {
-    val start = board.canonicalStart() ?: return 0
+    // Tanpa canonical start = tak bisa buka region tanpa nebak → bukan no-guess, par tak terdefinisi.
+    // Gagal eksplisit (ADR-0031), bukan diam-diam return 0 — konsisten dg check() buntu di bawah.
+    val start = board.canonicalStart()
+        ?: error("computeParMoves: board tanpa canonical start (bukan no-guess-solvable) — par tak terdefinisi")
     reveal(board, start)
     var moves = 1 // klik pertama
     while (board.revealed.size < board.safeCellCount) {

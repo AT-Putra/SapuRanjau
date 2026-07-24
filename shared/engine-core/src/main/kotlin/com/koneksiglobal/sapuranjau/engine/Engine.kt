@@ -51,6 +51,10 @@ class MinesweeperEngine : GameEngine {
 
     override fun reveal(board: Board, at: CellIndex): RevealResult {
         require(board.inBounds(at)) { "cell $at di luar grid ${board.config.gridWidth}x${board.config.gridHeight}" }
+        // Flag = "tidak membuka" (01_GDD.md): sel berflag kebal reveal langsung, sama seperti kebal
+        // cascade (floodFrom) & target chord. Cegah state flagged+revealed yang meracuni hitung
+        // flag tetangga di chord(). Buka-paksa harus lepas flag dulu (toggleFlag), bukan lewat reveal.
+        if (at in board.flags) return RevealResult.Revealed(emptyList())
         if (at in board.mines) return RevealResult.HitMine(at)
 
         val opened = ArrayList<RevealedCell>()
