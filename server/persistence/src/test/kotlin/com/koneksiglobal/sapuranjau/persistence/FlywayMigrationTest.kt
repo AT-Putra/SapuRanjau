@@ -2,9 +2,10 @@ package com.koneksiglobal.sapuranjau.persistence
 
 import org.flywaydb.core.Flyway
 import org.junit.jupiter.api.Test
-import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.junit.jupiter.Container
+import org.testcontainers.postgresql.PostgreSQLContainer
 import org.testcontainers.junit.jupiter.Testcontainers
+import org.testcontainers.utility.DockerImageName
 import java.sql.DriverManager
 import java.sql.SQLException
 import kotlin.test.assertEquals
@@ -17,8 +18,10 @@ class FlywayMigrationTest {
 
     // Container per-test (bukan static/shared): tiap test mulai dari DB kosong, jadi
     // migrationsExecuted selalu deterministik terlepas urutan eksekusi JUnit5.
+    // Import dari package `org.testcontainers.postgresql` = rumah resmi TC 2.0 (non-deprecated);
+    // BUKAN `org.testcontainers.containers.PostgreSQLContainer` lama yang jadi shim @Deprecated.
     @Container
-    val postgres = PostgreSQLContainer("postgres:16-alpine")
+    val postgres = PostgreSQLContainer(DockerImageName.parse("postgres:18-alpine"))
 
     private fun flyway() =
         Flyway.configure()

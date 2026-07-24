@@ -1,12 +1,14 @@
 # Version catalog — SATU sumber versi utk seluruh repo.
 # Bump versi = edit file INI saja (lihat CLAUDE.md / maintenance).
 [versions]
-kotlin = "2.4.0"
+kotlin = "2.4.10"
 springBoot = "4.1.0"
 springDependencyManagement = "1.1.7"
-flyway = "10.20.1"
-postgresql = "42.7.4"
-testcontainers = "1.21.3"
+flyway = "13.0.0"
+postgresql = "42.7.13"
+# testcontainers 2.0: modul di-rename ber-prefix `testcontainers-*` (lihat [libraries]);
+# core pakai docker-java 3.7.1 (vs 3.4.x di 1.21) → berpeluang beresin bug named-pipe/API mesin ini.
+testcontainers = "2.0.5"
 # agp = "9.2.0"   # Android Gradle Plugin — diaktifkan saat fase client (modul android pertama)
 
 [libraries]
@@ -20,5 +22,5 @@ springDependencyManagement-gradlePlugin = { module = "io.spring.gradle:dependenc
 flyway-core = { module = "org.flywaydb:flyway-core", version.ref = "flyway" }
 flyway-database-postgresql = { module = "org.flywaydb:flyway-database-postgresql", version.ref = "flyway" }
 postgresql = { module = "org.postgresql:postgresql", version.ref = "postgresql" }
-testcontainers-junit = { module = "org.testcontainers:junit-jupiter", version.ref = "testcontainers" }
-testcontainers-postgresql = { module = "org.testcontainers:postgresql", version.ref = "testcontainers" }
+testcontainers-junit = { module = "org.testcontainers:testcontainers-junit-jupiter", version.ref = "testcontainers" }
+testcontainers-postgresql = { module = "org.testcontainers:testcontainers-postgresql", version.ref = "testcontainers" }
