@@ -24,6 +24,7 @@ include(":shared:engine-core")
 include(":shared:scoring")
 // server/ — Spring Boot, modular monolith (ADR-0005 / ADR-0012)
 include(":server:app")
+include(":server:api")
 include(":server:persistence")
 //
 // Ditambah per-task saat diklaim (docs/04_TASKS.md) — tiap penambahan = 1 baris + 1 build.gradle.kts 3-baris:

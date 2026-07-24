@@ -9,6 +9,7 @@ postgresql = "42.7.13"
 # testcontainers 2.0: modul di-rename ber-prefix `testcontainers-*` (lihat [libraries]);
 # core pakai docker-java 3.7.1 (vs 3.4.x di 1.21) → berpeluang beresin bug named-pipe/API mesin ini.
 testcontainers = "2.0.5"
+firebaseAdmin = "9.10.0"   # verifikasi Firebase ID token server-side (ADR-0030, T-021)
 # agp = "9.2.0"   # Android Gradle Plugin — diaktifkan saat fase client (modul android pertama)
 
 [libraries]
@@ -24,3 +25,4 @@ flyway-database-postgresql = { module = "org.flywaydb:flyway-database-postgresql
 postgresql = { module = "org.postgresql:postgresql", version.ref = "postgresql" }
 testcontainers-junit = { module = "org.testcontainers:testcontainers-junit-jupiter", version.ref = "testcontainers" }
 testcontainers-postgresql = { module = "org.testcontainers:testcontainers-postgresql", version.ref = "testcontainers" }
+firebase-admin = { module = "com.google.firebase:firebase-admin", version.ref = "firebaseAdmin" }
