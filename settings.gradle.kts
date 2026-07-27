@@ -26,6 +26,7 @@ include(":shared:scoring")
 include(":server:app")
 include(":server:api")
 include(":server:persistence")
+include(":server:game")
 //
 // Ditambah per-task saat diklaim (docs/04_TASKS.md) — tiap penambahan = 1 baris + 1 build.gradle.kts 3-baris:
 //   shared:  contracts

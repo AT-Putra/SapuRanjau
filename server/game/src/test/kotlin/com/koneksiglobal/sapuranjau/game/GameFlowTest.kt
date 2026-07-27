@@ -1,0 +1,304 @@
+package com.koneksiglobal.sapuranjau.game
+
+import com.koneksiglobal.sapuranjau.engine.CellIndex
+import com.koneksiglobal.sapuranjau.engine.LevelConfig
+import com.koneksiglobal.sapuranjau.engine.MinesweeperEngine
+import com.koneksiglobal.sapuranjau.engine.RevealResult
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Test
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.beans.factory.annotation.Value
+import org.springframework.boot.autoconfigure.SpringBootApplication
+import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.jdbc.core.simple.JdbcClient
+import org.springframework.test.context.DynamicPropertyRegistry
+import org.springframework.test.context.DynamicPropertySource
+import org.springframework.web.client.RestClient
+import org.testcontainers.junit.jupiter.Container
+import org.testcontainers.junit.jupiter.Testcontainers
+import org.testcontainers.postgresql.PostgreSQLContainer
+import org.testcontainers.utility.DockerImageName
+import java.security.MessageDigest
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+
+// App test-only utk mengangkat modul library `game` + edge HTTP `api` (keduanya bukan @SpringBootApplication).
+// scanBasePackages = base → susunan bean identik server sungguhan (ServerApplication).
+@SpringBootApplication(scanBasePackages = ["com.koneksiglobal.sapuranjau"])
+class GameTestApp
+
+// Bukti runtime T-022 di Postgres 18 asli: alur start → aksi → skor tercatat, durabilitas progres
+// (ADR-0036: state selamat walau cache sesi hilang), one-shot (ADR-0024), provably-fair (ARCH §6.5).
+@Testcontainers
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+class GameFlowTest {
+
+    companion object {
+        @Container
+        @JvmStatic
+        val postgres = PostgreSQLContainer(DockerImageName.parse("postgres:18-alpine"))
+
+        @DynamicPropertySource
+        @JvmStatic
+        fun datasource(registry: DynamicPropertyRegistry) {
+            registry.add("spring.datasource.url") { postgres.jdbcUrl }
+            registry.add("spring.datasource.username") { postgres.username }
+            registry.add("spring.datasource.password") { postgres.password }
+        }
+    }
+
+    @Value("\${local.server.port}")
+    private var port: Int = 0
+
+    @Autowired private lateinit var jdbc: JdbcClient
+    @Autowired private lateinit var game: GameService
+
+    private val engine = MinesweeperEngine()
+    private val cfg = LevelConfig(gridWidth = 5, gridHeight = 5, mineCount = 3) // kecil → generate cepat
+    private val first = CellIndex(0, 0)
+
+    private data class Resp(val status: Int, val body: String?)
+
+    @BeforeEach
+    fun seedPeriodDanLevel() {
+        jdbc.sql("TRUNCATE level_score, board, run, level_config, period, app_user RESTART IDENTITY CASCADE").update()
+        val periodId = jdbc.sql(
+            "INSERT INTO period (name, starts_at, ends_at, status) " +
+                "VALUES ('test', now(), now() + interval '30 days', 'ACTIVE') RETURNING id",
+        ).query(Long::class.java).single()
+        repeat(2) { i -> // 2 level → uji `current_level` maju & `completed_all_at` (tie-breaker §8.2 #4)
+            jdbc.sql(
+                "INSERT INTO level_config (period_id, level_index, grid_width, grid_height, mine_count, base_score, life_cap) " +
+                    "VALUES (?, ?, ?, ?, ?, 1000, 3)",
+            ).params(periodId, i, cfg.gridWidth, cfg.gridHeight, cfg.mineCount).update()
+        }
+        game.evictAllSessions()
+    }
+
+    // ── Helper HTTP ──────────────────────────────────────────────────────────────────────────────
+
+    private val client get() = RestClient.create("http://localhost:$port")
+
+    private fun start(uid: String = "pemain-1"): StartResponse = client.post().uri("/v1/tournament/level/start")
+        .header("Authorization", "Bearer dev:$uid").retrieve().body(StartResponse::class.java)!!
+
+    // Server mengundi seed via SecureRandom → tak deterministik. Test mengunci seed langsung di DB
+    // (commit hash ikut disesuaikan) dan memilih seed yang klik-pertamanya TIDAK langsung menuntaskan
+    // level (cascade penuh) — supaya alur aksi bisa diuji tanpa flaky.
+    private fun startTerkunci(): StartResponse {
+        val s = start()
+        val seed = (1L..500L).first { engine.reveal(engine.generate(cfg, it, first), first) is RevealResult.Revealed }
+        jdbc.sql("UPDATE board SET seed = ?, commit_hash = ? WHERE id = ?")
+            .params(seed, hashOf(seed), s.boardId.toLong()).update()
+        game.evictAllSessions()
+        return start()
+    }
+
+    private fun act(runId: String, level: Int, action: MoveAction, c: CellIndex, uid: String = "pemain-1"): Resp =
+        client.post().uri("/v1/tournament/level/action")
+            .header("Authorization", "Bearer dev:$uid")
+            .body(ActionRequest(runId, level, action, CellDto(c.x, c.y)))
+            .exchange { _, res -> Resp(res.statusCode.value(), res.bodyTo(String::class.java)) }
+
+    private fun actOk(runId: String, action: MoveAction, c: CellIndex): ActionResponse =
+        client.post().uri("/v1/tournament/level/action")
+            .header("Authorization", "Bearer dev:pemain-1")
+            .body(ActionRequest(runId, 0, action, CellDto(c.x, c.y)))
+            .retrieve().body(ActionResponse::class.java)!!
+
+    private fun revealSeed(boardId: String, uid: String = "pemain-1"): Resp =
+        client.get().uri("/v1/tournament/level/$boardId/reveal")
+            .header("Authorization", "Bearer dev:$uid")
+            .exchange { _, res -> Resp(res.statusCode.value(), res.bodyTo(String::class.java)) }
+
+    // Peta bom TAK pernah dikirim ke klien (05 §6) — test menghitung sendiri dari seed di DB, pakai
+    // API publik engine: reveal pada bom = HitMine dan tidak mengubah papan.
+    private fun minesOf(boardId: String): Set<CellIndex> {
+        val probe = engine.generate(cfg, seedOf(boardId), first)
+        return allCells().filter { engine.reveal(probe, it) is RevealResult.HitMine }.toSet()
+    }
+
+    private fun allCells() = (0 until cfg.gridHeight).flatMap { y -> (0 until cfg.gridWidth).map { x -> CellIndex(x, y) } }
+
+    private fun seedOf(boardId: String): Long =
+        jdbc.sql("SELECT seed FROM board WHERE id = ?").param(boardId.toLong()).query(Long::class.java).single()
+
+    private fun statusBoard(boardId: String): String =
+        jdbc.sql("SELECT status FROM board WHERE id = ?").param(boardId.toLong()).query(String::class.java).single()
+
+    private fun hashOf(seed: Long): String {
+        val bytes = ByteArray(8) { i -> (seed ushr (56 - 8 * i)).toByte() }
+        return MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+    }
+
+    // Menuntaskan level 0 sampai bersih; balas respons aksi terakhir.
+    private fun tuntaskanLevel(s: StartResponse): ActionResponse {
+        actOk(s.runId, MoveAction.REVEAL, first)
+        val mines = minesOf(s.boardId)
+        var last: ActionResponse? = null
+        for (c in allCells().filter { it !in mines }) {
+            last = actOk(s.runId, MoveAction.REVEAL, c)
+            if (last.status == LevelStatus.LEVEL_CLEARED) break
+        }
+        return last!!
+    }
+
+    // ── Test ─────────────────────────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `start membalas commit hash dan dimensi grid, tanpa peta bom`() {
+        val s = start()
+        assertEquals(0, s.levelIndex)
+        assertEquals(cfg.gridWidth, s.gridWidth)
+        assertEquals(cfg.mineCount, s.mineCount)
+        assertEquals(64, s.commitHash.length, "commit = SHA-256 hex")
+        assertTrue(s.revealed.isEmpty() && s.flags.isEmpty(), "level baru: belum ada yang terbuka")
+        assertEquals(0, s.movesCount)
+    }
+
+    @Test
+    fun `start dua kali = resume level yang sama (seed & commit tak berubah)`() {
+        val a = start()
+        val b = start()
+        assertEquals(a.boardId, b.boardId)
+        assertEquals(a.commitHash, b.commitHash)
+    }
+
+    @Test
+    fun `aksi pertama wajib REVEAL — papan baru terwujud saat klik pertama`() {
+        val s = start()
+        assertEquals(400, act(s.runId, 0, MoveAction.FLAG, first).status)
+    }
+
+    @Test
+    fun `level tuntas mencatat level_score, memajukan run, dan menutup board`() {
+        val s = startTerkunci()
+        val last = tuntaskanLevel(s)
+
+        assertEquals(LevelStatus.LEVEL_CLEARED, last.status)
+        assertTrue(last.score!! > 0, "skor level > 0")
+
+        val row = jdbc.sql("SELECT score, par_moves, moves_count FROM level_score WHERE run_id = ?")
+            .param(s.runId.toLong()).query().singleRow()
+        assertEquals(last.score, row["score"])
+        assertTrue((row["par_moves"] as Int) > 0, "par per-papan terhitung (ADR-0017)")
+        assertEquals(last.movesCount, row["moves_count"])
+
+        val run = jdbc.sql("SELECT current_level, total_score, completed_all_at FROM run WHERE id = ?")
+            .param(s.runId.toLong()).query().singleRow()
+        assertEquals(1, run["current_level"], "one-shot: run maju ke level berikutnya")
+        assertEquals(last.score.toLong(), run["total_score"])
+        assertEquals(null, run["completed_all_at"], "baru 1 dari 2 level")
+
+        assertEquals("cleared", statusBoard(s.boardId))
+        assertEquals(1, start().levelIndex, "level 0 tak bisa diulang (one-shot, ADR-0024)")
+    }
+
+    @Test
+    fun `progres selamat walau cache sesi hilang (ADR-0036)`() {
+        val s = startTerkunci()
+        val terbuka = actOk(s.runId, MoveAction.REVEAL, first).cells.size
+        val mines = minesOf(s.boardId).toList()
+        actOk(s.runId, MoveAction.FLAG, mines[0])
+
+        game.evictAllSessions() // setara restart server: memori kosong, DB tetap sumber kebenaran
+
+        val resume = start()
+        assertEquals(s.boardId, resume.boardId)
+        assertEquals(terbuka, resume.revealed.size, "state terbuka dibangun ulang dari log langkah")
+        assertEquals(listOf(CellDto(mines[0].x, mines[0].y)), resume.flags)
+        assertEquals(1, resume.movesCount, "flag tak dihitung langkah (ADR-0018)")
+
+        // Papan hasil replay identik: flag masih melindungi selnya, dan bom lain tetap bom.
+        assertEquals(ActionResult.NO_OP, actOk(s.runId, MoveAction.REVEAL, mines[0]).result)
+        assertEquals(ActionResult.HIT_MINE, actOk(s.runId, MoveAction.REVEAL, mines[1]).result)
+    }
+
+    @Test
+    fun `kena bom menahan level menunggu nyawa, board tetap aktif`() {
+        val s = startTerkunci()
+        actOk(s.runId, MoveAction.REVEAL, first)
+        val mine = minesOf(s.boardId).first()
+
+        val hit = actOk(s.runId, MoveAction.REVEAL, mine)
+        assertEquals(ActionResult.HIT_MINE, hit.result)
+        assertEquals(LevelStatus.HIT_MINE, hit.status)
+        // Level belum gugur & belum diskor: menunggu pemakaian nyawa (ARCH §6.3, T-023).
+        assertEquals("active", statusBoard(s.boardId))
+        assertEquals(0, jdbc.sql("SELECT count(*) FROM level_score").query(Long::class.java).single().toInt())
+        assertEquals(409, act(s.runId, 0, MoveAction.REVEAL, CellIndex(4, 4)).status, "aksi lain ditolak")
+        assertTrue(start().awaitingLife)
+    }
+
+    @Test
+    fun `flag gratis-langkah, flag di sel terbuka = NO_OP`() {
+        val s = startTerkunci()
+        val opened = actOk(s.runId, MoveAction.REVEAL, first)
+        assertEquals(1, opened.movesCount)
+
+        val tertutup = allCells().first { c -> opened.cells.none { it.x == c.x && it.y == c.y } }
+        assertEquals(ActionResult.FLAGGED, actOk(s.runId, MoveAction.FLAG, tertutup).result)
+        assertEquals(ActionResult.UNFLAGGED, actOk(s.runId, MoveAction.FLAG, tertutup).result)
+
+        val terbuka = CellIndex(opened.cells[0].x, opened.cells[0].y)
+        val terakhir = actOk(s.runId, MoveAction.FLAG, terbuka)
+        assertEquals(ActionResult.NO_OP, terakhir.result, "sel terbuka tak bisa diflag")
+        assertEquals(1, terakhir.movesCount, "flag & no-op tak menambah langkah (ADR-0018)")
+    }
+
+    @Test
+    fun `seed hanya diungkap setelah level selesai, dan cocok dengan commit hash`() {
+        val s = startTerkunci()
+        assertEquals(409, revealSeed(s.boardId).status, "board masih aktif → seed = peta bom")
+
+        tuntaskanLevel(s)
+
+        val r = client.get().uri("/v1/tournament/level/${s.boardId}/reveal")
+            .header("Authorization", "Bearer dev:pemain-1").retrieve().body(RevealSeedResponse::class.java)!!
+        assertEquals(s.commitHash, r.commitHash)
+        assertEquals(hashOf(r.seed.toLong()), r.commitHash, "commit-reveal terverifikasi (ARCH §6.5)")
+    }
+
+    // Mengunci "prefix /v1 = aman-default" (ApiWebConfig): kalau predikat prefix rusak, controller
+    // modul feature jatuh ke `/tournament/...` yang TAK dijaga BearerAuthFilter → test ini gagal.
+    @Test
+    fun `endpoint game tanpa bearer ditolak 401`() {
+        val r = client.post().uri("/v1/tournament/level/start")
+            .exchange { _, res -> Resp(res.statusCode.value(), res.bodyTo(String::class.java)) }
+        assertEquals(401, r.status, "body: ${r.body}")
+        assertTrue(r.body!!.contains("\"code\":\"UNAUTHENTICATED\""), "body: ${r.body}")
+    }
+
+    // Body cacat = salah klien (400 VALIDATION), bukan 500. Menjaga dua hal sekaligus: advice tak
+    // menelan exception MVC standar, dan Jackson menegakkan non-null Kotlin (butuh module kotlin).
+    @Test
+    fun `body aksi tanpa field wajib ditolak 400`() {
+        val r = client.post().uri("/v1/tournament/level/action")
+            .header("Authorization", "Bearer dev:pemain-1")
+            .header("Content-Type", "application/json")
+            .body("{}")
+            .exchange { _, res -> Resp(res.statusCode.value(), res.bodyTo(String::class.java)) }
+        assertEquals(400, r.status, "body: ${r.body}")
+        assertTrue(r.body!!.contains("\"code\":\"VALIDATION\""), "body: ${r.body}")
+    }
+
+    // Tanpa module Kotlin, Jackson mengisi primitif non-null yang absen dengan 0 diam-diam →
+    // `levelIndex` hilang dibaca sbg level 0 (bisa beraksi di level yang salah, one-shot ADR-0024).
+    @Test
+    fun `body aksi tanpa levelIndex ditolak, bukan diam-diam dianggap level 0`() {
+        val s = start()
+        val r = client.post().uri("/v1/tournament/level/action")
+            .header("Authorization", "Bearer dev:pemain-1")
+            .header("Content-Type", "application/json")
+            .body("""{"runId":"${s.runId}","action":"REVEAL","cell":{"x":0,"y":0}}""")
+            .exchange { _, res -> Resp(res.statusCode.value(), res.bodyTo(String::class.java)) }
+        assertEquals(400, r.status, "body: ${r.body}")
+    }
+
+    @Test
+    fun `run pemain lain tak bisa disentuh`() {
+        val s = start("pemain-1")
+        assertEquals(404, revealSeed(s.boardId, uid = "pemain-2").status)
+        assertEquals(404, act(s.runId, 0, MoveAction.REVEAL, first, uid = "pemain-2").status)
+    }
+}

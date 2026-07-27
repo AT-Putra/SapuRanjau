@@ -1,5 +1,18 @@
 spring:
   application:
     name: sapuranjau-server
+  datasource:
+    # Kredensial via env (ADR-0015: secret di env-file 0600, TAK di-commit). Default = local dev.
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/sapuranjau}
+    username: ${DB_USER:sapuranjau}
+    password: ${DB_PASSWORD:sapuranjau}
+    hikari:
+      maximum-pool-size: 10 # docs/08 §4: pool kecil — tiap koneksi PG = proses
+  flyway:
+    enabled: true # migrasi V1..V16 dari server/persistence (ADR-0020)
 server:
   port: 8080
+sapuranjau:
+  scoring:
+    # parTimeMs = parMoves × konstanta ini (05 §2, ADR-0017 tunable). Kalibrasi playtest → admin-config.
+    ms-per-par-move: 2000

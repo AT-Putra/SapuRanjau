@@ -10,7 +10,6 @@ import org.springframework.context.annotation.Configuration
 import org.springframework.core.MethodParameter
 import org.springframework.web.bind.support.WebDataBinderFactory
 import org.springframework.web.context.request.NativeWebRequest
-import org.springframework.web.method.HandlerTypePredicate
 import org.springframework.web.method.support.HandlerMethodArgumentResolver
 import org.springframework.web.method.support.ModelAndViewContainer
 import org.springframework.web.servlet.config.annotation.PathMatchConfigurer
@@ -26,7 +25,11 @@ class ApiWebConfig(
 ) : WebMvcConfigurer {
 
     override fun configurePathMatch(configurer: PathMatchConfigurer) {
-        configurer.addPathPrefix("/v1", HandlerTypePredicate.forBasePackage("com.koneksiglobal.sapuranjau.api"))
+        // Semua controller modul feature (sub-paket dari base) ter-prefix `/v1` → otomatis pula
+        // terlindungi BearerAuthFilter yang menjaga `/v1/*`. Default AMAN: modul baru (game, lives, …)
+        // tak bisa lupa mendaftar dan diam-diam terbit tanpa auth. Controller di paket base itu
+        // sendiri (server/app: `/health`) TIDAK ter-prefix — memang publik.
+        configurer.addPathPrefix("/v1") { it.packageName != BASE_PACKAGE && it.packageName.startsWith("$BASE_PACKAGE.") }
     }
 
     override fun addArgumentResolvers(resolvers: MutableList<HandlerMethodArgumentResolver>) {
@@ -36,6 +39,10 @@ class ApiWebConfig(
     @Bean
     fun bearerAuthFilter(): FilterRegistrationBean<BearerAuthFilter> =
         FilterRegistrationBean(BearerAuthFilter(verifier, mapper)).apply { order = 1 }
+
+    private companion object {
+        const val BASE_PACKAGE = "com.koneksiglobal.sapuranjau"
+    }
 }
 
 // Injeksi VerifiedUser ke param controller dari atribut request (diisi BearerAuthFilter). Endpoint

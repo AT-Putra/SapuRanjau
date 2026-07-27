@@ -46,4 +46,14 @@ class ApiSkeletonTest {
     fun `bearer invalid ditolak 401`() {
         assertEquals(401, getStatus("Bearer token-ngawur").status)
     }
+
+    // Advice catch-all TIDAK boleh menelan exception MVC standar jadi 500 (route salah, body rusak,
+    // method salah → status aslinya). Gigit begitu ada endpoint POST ber-body (T-022).
+    @Test
+    fun `rute v1 tak dikenal balas 404, bukan 500`() {
+        val r = RestClient.create("http://localhost:$port").get().uri("/v1/tak-ada")
+            .header("Authorization", "Bearer dev:user-123")
+            .exchange { _, res -> Resp(res.statusCode.value(), res.bodyTo(String::class.java)) }
+        assertEquals(404, r.status, "body: ${r.body}")
+    }
 }

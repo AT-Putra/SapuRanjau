@@ -16,6 +16,9 @@ tasks.named("bootJar") { enabled = false }
 tasks.named("jar") { enabled = true }
 
 dependencies {
+    // Spring Data & Jackson memakai refleksi Kotlin utk menemukan ctor data class (entity/DTO).
+    // Tanpa ini: NoClassDefFoundError kotlin/reflect/full/KClasses saat context start.
+    "implementation"(kotlin("reflect"))
     "testImplementation"(kotlin("test"))
 }
 
