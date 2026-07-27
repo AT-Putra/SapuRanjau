@@ -10,6 +10,9 @@ postgresql = "42.7.13"
 # core pakai docker-java 3.7.1 (vs 3.4.x di 1.21) → berpeluang beresin bug named-pipe/API mesin ini.
 testcontainers = "2.0.5"
 firebaseAdmin = "9.10.0"   # verifikasi Firebase ID token server-side (ADR-0030, T-021)
+# OAuth2 service-account → access token utk Play Developer API (ADR-0011/0025, T-025). Sudah ada di
+# graph (transitif firebase-admin); dideklarasikan eksplisit karena `implementation` tak menular.
+googleAuth = "1.49.0"
 # agp = "9.2.0"   # Android Gradle Plugin — diaktifkan saat fase client (modul android pertama)
 
 [libraries]
@@ -26,3 +29,4 @@ postgresql = { module = "org.postgresql:postgresql", version.ref = "postgresql" 
 testcontainers-junit = { module = "org.testcontainers:testcontainers-junit-jupiter", version.ref = "testcontainers" }
 testcontainers-postgresql = { module = "org.testcontainers:testcontainers-postgresql", version.ref = "testcontainers" }
 firebase-admin = { module = "com.google.firebase:firebase-admin", version.ref = "firebaseAdmin" }
+google-auth = { module = "com.google.auth:google-auth-library-oauth2-http", version.ref = "googleAuth" }

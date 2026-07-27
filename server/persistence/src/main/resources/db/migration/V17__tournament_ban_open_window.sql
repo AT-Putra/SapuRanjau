@@ -1,0 +1,11 @@
+-- tournament_ban.period_end_id boleh NULL (T-025, ADR-0038). docs/08_DATA_SCHEMA.md §2.13.
+--
+-- Ban terbit SEKETIKA saat void terdeteksi, sedangkan periode dibuat admin ad-hoc tanpa cadence
+-- (ADR-0021) → saat ban dibuat, P+1/P+2 biasanya BELUM ADA. Kolom NOT NULL memaksa mengarang
+-- nilai (mis. period_end_id = P) yang membuat catatan sanksi terbaca "ban 1 periode" padahal
+-- penegakannya 3 — menyesatkan siapa pun yang menangani banding pemain.
+--
+-- Semantik baru: NULL = "jendela belum bisa dipastikan; P+2 belum dibuat". Penegakan TIDAK memakai
+-- kolom ini melainkan JARAK ORDINAL dari period_start_id (ADR-0025: P, P+1, P+2 → eligible P+3),
+-- diurut `starts_at`. Kolom = snapshot informatif utk admin panel, diisi bila periodenya sudah ada.
+ALTER TABLE tournament_ban ALTER COLUMN period_end_id DROP NOT NULL;

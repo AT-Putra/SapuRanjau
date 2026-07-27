@@ -12,6 +12,7 @@ dependencies {
     implementation(project(":server:api"))               // edge HTTP + auth (T-021) → di-scan app
     implementation(project(":server:game"))              // orkestrasi run turnamen (T-022)
     implementation(project(":server:lives"))             // dompet nyawa + GET /v1/wallet (T-023)
+    implementation(project(":server:billing"))           // verifikasi pembelian + void/ban (T-025)
     runtimeOnly(project(":server:persistence"))          // migrasi Flyway V1..V16 jalan saat boot
     runtimeOnly("org.springframework.boot:spring-boot-flyway") // Boot 4: autoconfig Flyway = modul terpisah
 }

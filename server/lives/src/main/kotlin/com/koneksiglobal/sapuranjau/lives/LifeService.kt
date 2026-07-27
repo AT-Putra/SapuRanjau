@@ -72,6 +72,26 @@ class LifeService(private val jdbc: JdbcClient) {
                 "SELECT ?, 'free', 'earn_casual', p.id, p.ends_at FROM period p WHERE p.status = 'ACTIVE'",
         ).param(userId).update() == 1
 
+    // PaidLife hasil pembelian terverifikasi (ADR-0011/0022) — `expiry` NULL = carry-over lintas
+    // periode (ADR-0008). Satu baris per token nyawa supaya clawback bisa menyasar sisa yang belum
+    // terpakai. Dipanggil `server/billing` SETELAH Play mengonfirmasi purchase-nya.
+    @Transactional
+    fun grantPaid(userId: Long, purchaseId: Long, count: Int) {
+        require(count > 0) { "count nyawa harus > 0" }
+        jdbc.sql(
+            "INSERT INTO life_ledger (user_id, type, source, purchase_id) " +
+                "SELECT ?, 'paid', 'purchase', ? FROM generate_series(1, ?)",
+        ).params(userId, purchaseId, count).update()
+    }
+
+    // Clawback saat purchase di-void (ADR-0025): cabut nyawa dari purchase itu yang MASIH tersisa.
+    // Yang sudah dipakai tetap `used` — tak ada saldo minus, lantai 0 datang dari filter `available`
+    // ini sendiri, bukan dari aritmetika. Balas jumlah yang tercabut (0 = sudah habis dipakai).
+    @Transactional
+    fun clawbackPurchase(purchaseId: Long): Int =
+        jdbc.sql("UPDATE life_ledger SET status = 'clawed_back' WHERE purchase_id = ? AND status = 'available'")
+            .param(purchaseId).update()
+
     // Hitungan earn casual pada jendela reset TETAP (kalender), bukan rolling window — ADR-0023.
     // Batas hari/minggu/bulan dihitung di zona waktu pemain (Indonesia), bukan UTC: pemain melihat
     // jatah hariannya pulih tengah malam waktu setempat. Satu query, tiga hitungan.

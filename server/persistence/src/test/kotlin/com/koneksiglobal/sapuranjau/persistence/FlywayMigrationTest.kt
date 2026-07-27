@@ -28,11 +28,12 @@ class FlywayMigrationTest {
             .dataSource(postgres.jdbcUrl, postgres.username, postgres.password)
             .load()
 
-    // 15 entitas (V1..V15) + V16 progres level berjalan di `board` (ADR-0036, T-022).
+    // 15 entitas (V1..V15) + V16 progres level berjalan di `board` (ADR-0036, T-022)
+    // + V17 jendela ban terbuka (ADR-0038, T-025).
     @Test
     fun migratesAllVersionsCleanly() {
         val result = flyway().migrate()
-        assertEquals(16, result.migrationsExecuted)
+        assertEquals(17, result.migrationsExecuted)
     }
 
     @Test
