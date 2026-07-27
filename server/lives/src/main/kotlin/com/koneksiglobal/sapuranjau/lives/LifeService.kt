@@ -45,10 +45,7 @@ class LifeService(private val jdbc: JdbcClient) {
     // di tengah periode. Hangus di akhir periode lewat `expiry = period.ends_at` (ADR-0008).
     @Transactional
     fun grantPeriodLives(userId: Long) {
-        // Serialisasi per-pemain: dua request bersamaan tak boleh menghasilkan 4 nyawa. Lock baris
-        // app_user (bukan tabel) → hanya pemain ini yang menunggu.
-        jdbc.sql("SELECT id FROM app_user WHERE id = ? FOR UPDATE").param(userId).query(Long::class.java).optional()
-
+        lockUser(userId)
         jdbc.sql(
             "INSERT INTO life_ledger (user_id, type, source, period_id, expiry) " +
                 "SELECT ?, 'free', 'grant_period', p.id, p.ends_at FROM period p, generate_series(1, ?) " +
@@ -56,6 +53,37 @@ class LifeService(private val jdbc: JdbcClient) {
                 "SELECT 1 FROM life_ledger l WHERE l.user_id = ? AND l.period_id = p.id AND l.source = 'grant_period')",
         ).params(userId, LIVES_PER_PERIOD, userId).update()
     }
+
+    // Serialisasi per-pemain untuk semua jalur pencetakan nyawa: dua request bersamaan tak boleh
+    // lolos cek yang sama lalu sama-sama mencetak. Lock baris `app_user` (bukan tabel) → hanya
+    // pemain ini yang menunggu. Dipakai grant periode & klaim casual (T-024).
+    @Transactional
+    fun lockUser(userId: Long) {
+        jdbc.sql("SELECT id FROM app_user WHERE id = ? FOR UPDATE").param(userId).query(Long::class.java).optional()
+    }
+
+    // 1 FreeLife hasil menang casual (ADR-0023) — terikat periode aktif & hangus bersamanya.
+    // false = tak ada periode `ACTIVE` → tak ada yang dicetak (earn hanya saat periode berjalan).
+    // Cap-nya BUKAN urusan sini: kebijakan earn ada di CasualClaimService.
+    @Transactional
+    fun grantEarnedCasual(userId: Long): Boolean =
+        jdbc.sql(
+            "INSERT INTO life_ledger (user_id, type, source, period_id, expiry) " +
+                "SELECT ?, 'free', 'earn_casual', p.id, p.ends_at FROM period p WHERE p.status = 'ACTIVE'",
+        ).param(userId).update() == 1
+
+    // Hitungan earn casual pada jendela reset TETAP (kalender), bukan rolling window — ADR-0023.
+    // Batas hari/minggu/bulan dihitung di zona waktu pemain (Indonesia), bukan UTC: pemain melihat
+    // jatah hariannya pulih tengah malam waktu setempat. Satu query, tiga hitungan.
+    fun earnedCasualCounts(userId: Long, zone: String): EarnCounts =
+        jdbc.sql(
+            "SELECT count(*) FILTER (WHERE created_at >= date_trunc('day',   now() AT TIME ZONE :tz) AT TIME ZONE :tz) AS d, " +
+                "count(*) FILTER (WHERE created_at >= date_trunc('week',  now() AT TIME ZONE :tz) AT TIME ZONE :tz) AS w, " +
+                "count(*) FILTER (WHERE created_at >= date_trunc('month', now() AT TIME ZONE :tz) AT TIME ZONE :tz) AS m " +
+                "FROM life_ledger WHERE user_id = :uid AND source = 'earn_casual'",
+        ).param("uid", userId).param("tz", zone).query { rs, _ ->
+            EarnCounts(rs.getInt("d"), rs.getInt("w"), rs.getInt("m"))
+        }.single()
 
     // Resolusi Firebase UID → id pemain. Baris dibuat saat pertama terlihat, sama seperti jalur
     // `game` (ADR-0030: casual tanpa login, akun lahir saat pemain menyentuh fitur online).
@@ -76,3 +104,6 @@ class LifeService(private val jdbc: JdbcClient) {
 
 // Saldo nyawa aktif. `nextExpiry` = kedaluwarsa terdekat (null bila semua paid/carry-over).
 data class Wallet(val free: Int, val paid: Int, val nextExpiry: Instant?)
+
+// Nyawa hasil earn casual dalam jendela hari/minggu/bulan berjalan (ADR-0023).
+data class EarnCounts(val daily: Int, val weekly: Int, val monthly: Int)
