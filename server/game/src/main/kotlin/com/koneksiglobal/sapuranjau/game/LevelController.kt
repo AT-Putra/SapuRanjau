@@ -29,6 +29,17 @@ class LevelController(private val game: GameService) {
         game.revealSeed(user.uid, id.toLongOrNull() ?: -1)
 }
 
+// POST /v1/tournament/life/use — kena bom → bakar 1 nyawa (FIFO-expiry ADR-0008); level lanjut di
+// tempat dengan bom penyebab mati ter-flag (ADR-0037). Dilayani `game`, bukan `lives`, karena yang
+// berubah adalah papan; `lives` hanya menyediakan dompetnya.
+@RestController
+@RequestMapping("/tournament/life")
+class LifeController(private val game: GameService) {
+
+    @PostMapping("/use")
+    fun use(user: VerifiedUser, @RequestBody req: UseLifeRequest): UseLifeResponse = game.useLife(user.uid, req)
+}
+
 data class CellDto(val x: Int, val y: Int)
 
 data class RevealedCellDto(val x: Int, val y: Int, val adjacentMines: Int)
@@ -66,6 +77,17 @@ data class ActionResponse(
     val status: LevelStatus,
     val movesCount: Int, // langkah terskor (ADR-0018)
     val score: Int? = null, // terisi hanya saat LEVEL_CLEARED
+)
+
+data class UseLifeRequest(val runId: String, val levelIndex: Int)
+
+// `lifeCap` ikut dikirim supaya klien bisa memperingatkan "level ini sudah 0 skor" SEBELUM pemain
+// membakar nyawa berikutnya (livesUsed >= lifeCap → penalti 0, ADR-0017/0037).
+data class UseLifeResponse(
+    val livesUsed: Int,
+    val lifeCap: Int,
+    val freeLives: Int,
+    val paidLives: Int,
 )
 
 data class RevealSeedResponse(

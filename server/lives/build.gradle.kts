@@ -1,18 +1,15 @@
-// server/game — orkestrasi run turnamen one-shot (T-022, ADR-0024): start level, aksi, skor level,
-// reveal seed. Progres level berjalan persisten di `board` (ADR-0036); engine & scoring dari shared/.
+// server/lives — dompet nyawa: grant, saldo, konsumsi FIFO-expiry (T-023, ADR-0008/0037).
+// Tak bergantung pada `game`: `game` yang memanggil `lives` saat pemain memakai nyawa.
 plugins {
     id("sapuranjau.spring-library")
 }
 
 // BOM Boot mem-pin Flyway lebih rendah dari catalog. Kembalikan ke versi catalog (latest-stable,
-// ADR-0034) supaya versi yang dites `FlywayMigrationTest` = versi yang benar-benar jalan di sini.
+// ADR-0034) supaya versi yang dites = versi yang benar-benar jalan di sini.
 extra["flyway.version"] = libs.versions.flyway.get()
 
 dependencies {
-    implementation(project(":shared:engine-core"))
-    implementation(project(":shared:scoring"))
     implementation(project(":server:api")) // VerifiedUser + ApiException/ErrorCode (ADR-0035)
-    implementation(project(":server:lives")) // konsumsi nyawa FIFO-expiry (T-023, ADR-0008/0037)
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-data-jdbc") // ADR-0020
 

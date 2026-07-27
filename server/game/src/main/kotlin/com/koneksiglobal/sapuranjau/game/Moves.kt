@@ -6,12 +6,16 @@ import com.koneksiglobal.sapuranjau.engine.CellIndex
 // replay atas board f(config, seed, klik-pertama). Format sama persis di `board.moves` (berjalan)
 // dan `level_score.moves` (final, bahan re-sim anti-cheat ARCH §9).
 
-enum class MoveAction { REVEAL, FLAG, CHORD }
+// USE_LIFE = pemakaian nyawa setelah kena bom (ADR-0037), dicatat di log yang sama supaya replay
+// merekonstruksi "hidup lagi + bom terflag" tanpa kolom/tabel tambahan. Ordinal 3 = slot terakhir
+// yang muat di 2 bit codec; log lama (aksi 0..2) tetap terbaca apa adanya.
+enum class MoveAction { REVEAL, FLAG, CHORD, USE_LIFE }
 
 data class Move(val action: MoveAction, val cell: CellIndex)
 
 // 2 byte per langkah: b0 = aksi(2 bit atas) | x(6 bit bawah), b1 = y. Plafon 64×256 sel — jauh di
 // atas grid terbesar yang mungkin (expert klasik 16×30, ADR-0031). Compact sesuai `08` §2.6.
+// ponytail: 2 bit aksi kini PENUH (4/4). Aksi ke-5 = ganti format (mis. 3 byte), bukan tambal.
 object MoveCodec {
     const val MAX_X = 63
     const val MAX_Y = 255

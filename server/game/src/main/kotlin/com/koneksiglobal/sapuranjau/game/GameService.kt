@@ -8,6 +8,7 @@ import com.koneksiglobal.sapuranjau.engine.LevelConfig
 import com.koneksiglobal.sapuranjau.engine.MinesweeperEngine
 import com.koneksiglobal.sapuranjau.engine.RevealResult
 import com.koneksiglobal.sapuranjau.engine.RevealedCell
+import com.koneksiglobal.sapuranjau.lives.LifeService
 import com.koneksiglobal.sapuranjau.scoring.LevelPar
 import com.koneksiglobal.sapuranjau.scoring.LevelPlay
 import com.koneksiglobal.sapuranjau.scoring.LevelScoring
@@ -34,6 +35,7 @@ class GameService(
     private val runs: RunRepo,
     private val boards: BoardRepo,
     private val scores: LevelScoreRepo,
+    private val lives: LifeService, // T-023: konsumsi FIFO-expiry; `game` → `lives`, tak sebaliknya
     private val jdbc: JdbcClient,
     // parTimeMs = parMoves × konstanta (05 §2). Tunable (ADR-0017/0036); pindah ke admin-config saat kalibrasi.
     @Value("\${sapuranjau.scoring.ms-per-par-move:2000}") private val msPerParMove: Long,
@@ -105,12 +107,12 @@ class GameService(
     // ── Endpoint: reveal / flag / chord (05 §3, ARCH §6.2) ───────────────────────────────────────
     @Transactional
     fun action(uid: String, req: ActionRequest): ActionResponse {
-        val user = users.findByFirebaseUid(uid) ?: throw notFound("Run tak ditemukan.")
-        val runId = req.runId.toLongOrNull() ?: throw ApiException(HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION, "runId tak valid.")
-        val run = runs.findById(runId).orElse(null)?.takeIf { it.userId == user.id } ?: throw notFound("Run tak ditemukan.")
-        val cfg = levels.findByPeriodIdAndLevelIndex(run.periodId, req.levelIndex) ?: throw notFound("Level tak ditemukan.")
-        val row = boards.findByRunIdAndLevelConfigId(run.id!!, cfg.id!!) ?: throw notFound("Level belum dimulai.")
-        if (row.status != "active") throw ApiException(HttpStatus.CONFLICT, ErrorCode.CONFLICT, "Level ini sudah selesai (one-shot).")
+        if (req.action == MoveAction.USE_LIFE) {
+            // USE_LIFE hidup di log langkah (ADR-0037), bukan di alfabet aksi klien: memakainya di
+            // sini akan melewati pemotongan nyawa. Jalurnya `/tournament/life/use`.
+            throw ApiException(HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION, "Pakai POST /tournament/life/use untuk memakai nyawa.")
+        }
+        val (_, run, cfg, row) = locate(uid, req.runId, req.levelIndex)
         if (req.cell.x !in 0 until cfg.gridWidth || req.cell.y !in 0 until cfg.gridHeight) {
             throw ApiException(HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION, "Sel di luar grid ${cfg.gridWidth}x${cfg.gridHeight}.")
         }
@@ -132,7 +134,6 @@ class GameService(
             }
             s.moves += out.move
             s.scoredMoves += out.scored
-            s.dead = s.dead || out.dead
 
             val score = if (out.cleared) finalizeLevel(run, cfg, s) else null
             persist(s, prevLogBytes, if (out.cleared) "cleared" else "active")
@@ -149,6 +150,46 @@ class GameService(
                 movesCount = s.scoredMoves,
                 score = score,
             )
+        }
+    }
+
+    // ── Endpoint: pakai nyawa setelah kena bom (05 §3, ARCH §6.3, ADR-0037) ──────────────────────
+    // Level LANJUT DI TEMPAT: bom yang membunuh di-auto-flag (flag = "tidak membuka" di engine → sel
+    // itu kebal reveal/cascade/chord, dan hitungan chord tetap benar karena flagnya memang benar).
+    // Bukan rewind (sel tersembunyi lagi = pemain bisa mati di bom yang sama berulang kali) dan bukan
+    // restart level (melanggar one-shot ADR-0024).
+    @Transactional
+    fun useLife(uid: String, req: UseLifeRequest): UseLifeResponse {
+        val (user, run, cfg, row) = locate(uid, req.runId, req.levelIndex)
+        if (run.scoreLocked) throw ApiException(HttpStatus.FORBIDDEN, ErrorCode.CONFLICT, "Skor run ini terkunci.")
+
+        return onBoard(row.id!!) {
+            val s = sessionOf(row, cfg)
+            if (!s.dead) throw ApiException(HttpStatus.CONFLICT, ErrorCode.CONFLICT, "Level ini tidak sedang menunggu nyawa.")
+            val at = checkNotNull(s.deadAt) { "board ${s.boardId}: dead tanpa deadAt" }
+
+            // Konsumsi & papan ditulis dalam SATU transaksi: kalau optimistic lock di persist() kalah,
+            // nyawanya ikut kembali. Nyawa boleh dipakai walau skor level sudah 0 (livesUsed >=
+            // lifeCap) — menolaknya mengunci run selamanya di level ini (ADR-0037).
+            if (!lives.consumeOne(user.id!!, run.id!!)) {
+                throw ApiException(HttpStatus.CONFLICT, ErrorCode.CONFLICT, "Nyawa habis. Beli atau menangkan di mode casual.")
+            }
+
+            val prevLogBytes = s.moves.size * 2
+            val m = Move(MoveAction.USE_LIFE, at)
+            try {
+                apply(s, m)
+                s.moves += m
+                s.lastTick = System.currentTimeMillis() // jeda mencari nyawa bukan waktu bermain
+                runs.save(run.copy(livesUsed = run.livesUsed + 1, updatedAt = Instant.now())) // tie-breaker ADR-0009
+                persist(s, prevLogBytes, "active")
+            } catch (e: Exception) {
+                sessions.remove(s.boardId) // sesi = memo di luar transaksi: jangan tertinggal lebih maju dari DB
+                throw e
+            }
+
+            val w = lives.wallet(user.id)
+            UseLifeResponse(s.livesUsed, cfg.lifeCap, w.free, w.paid)
         }
     }
 
@@ -174,6 +215,17 @@ class GameService(
 
     private fun notFound(msg: String) = ApiException(HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, msg)
 
+    // Resolusi (pemain, run, level, board) + cek kepemilikan — sama untuk aksi & pakai nyawa.
+    private fun locate(uid: String, runIdRaw: String, levelIndex: Int): Located {
+        val user = users.findByFirebaseUid(uid) ?: throw notFound("Run tak ditemukan.")
+        val runId = runIdRaw.toLongOrNull() ?: throw ApiException(HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION, "runId tak valid.")
+        val run = runs.findById(runId).orElse(null)?.takeIf { it.userId == user.id } ?: throw notFound("Run tak ditemukan.")
+        val cfg = levels.findByPeriodIdAndLevelIndex(run.periodId, levelIndex) ?: throw notFound("Level tak ditemukan.")
+        val row = boards.findByRunIdAndLevelConfigId(run.id!!, cfg.id!!) ?: throw notFound("Level belum dimulai.")
+        if (row.status != "active") throw ApiException(HttpStatus.CONFLICT, ErrorCode.CONFLICT, "Level ini sudah selesai (one-shot).")
+        return Located(user, run, cfg, row)
+    }
+
     private fun sessionOf(row: BoardRow, cfg: LevelConfigRow): LevelSession =
         sessions[row.id!!] ?: replay(row, cfg).also { sessions[row.id] = it }
 
@@ -181,10 +233,10 @@ class GameService(
     // putar ulang log langkah. Angka terskor/waktu diambil dari kolom (ditulis satu transaksi dg log).
     private fun replay(row: BoardRow, cfg: LevelConfigRow): LevelSession {
         val s = LevelSession(row.id!!, row.seed, cfg.toEngineConfig())
+        // `dead`/`deadAt`/`livesUsed` tak perlu diset di sini: apply() sendiri yang memutarnya.
         for (m in MoveCodec.decode(row.moves)) {
-            val out = apply(s, m)
+            apply(s, m)
             s.moves += m
-            s.dead = s.dead || out.dead
         }
         s.scoredMoves = row.movesCount
         s.activeMs = row.activeTimeMs
@@ -205,10 +257,27 @@ class GameService(
                 val on = if (s.flags.add(m.cell)) true else { s.flags.remove(m.cell); false }
                 Outcome(m, if (on) ActionResult.FLAGGED else ActionResult.UNFLAGGED, scored = 0) // flag gratis (ADR-0018)
             }
+            // Nyawa (ADR-0037): bom penyebab mati ditandai flag → tak bisa membunuh lagi, dan pemain
+            // memang berhak tahu letaknya (dia sudah membayar). Flag = 0 langkah (ADR-0018); penalti
+            // skornya lewat livesUsed (ADR-0017). `dead` dimiliki apply() (satu-satunya transisi
+            // state, dipakai aksi live & replay) → resume tak butuh cabang khusus.
+            MoveAction.USE_LIFE -> {
+                if (s.flags.add(m.cell)) engine.toggleFlag(board, m.cell)
+                s.dead = false
+                s.deadAt = null
+                s.livesUsed++
+                Outcome(m, ActionResult.FLAGGED, scored = 0)
+            }
             MoveAction.REVEAL, MoveAction.CHORD -> {
                 val r = if (m.action == MoveAction.REVEAL) engine.reveal(board, m.cell) else engine.chord(board, m.cell)
                 when (r) {
-                    is RevealResult.HitMine -> Outcome(m, ActionResult.HIT_MINE, dead = true)
+                    // `r.at` = bom yang MELEDAK; utk chord itu bukan sel yang di-tap (m.cell) — sel
+                    // inilah yang di-flag saat nyawa dipakai (ADR-0037).
+                    is RevealResult.HitMine -> {
+                        s.dead = true
+                        s.deadAt = r.at
+                        Outcome(m, ActionResult.HIT_MINE, dead = true)
+                    }
                     is RevealResult.Revealed ->
                         if (r.cells.isEmpty()) Outcome(m, ActionResult.NO_OP, record = false) // tak ada yang terbuka = bukan langkah
                         else Outcome(m, ActionResult.REVEALED, cells = s.absorb(r.cells))
@@ -223,14 +292,14 @@ class GameService(
         // Par = jalur bersih solver PER-PAPAN; computeParMoves memakai salinan segar → aman walau dimainkan.
         val parMoves = engine.computeParMoves(s.board!!)
         val par = LevelPar(parMoves, parMoves * msPerParMove)
-        val play = LevelPlay(moves = s.scoredMoves, activeTimeMs = s.activeMs, livesUsed = 0) // nyawa = T-023
+        val play = LevelPlay(moves = s.scoredMoves, activeTimeMs = s.activeMs, livesUsed = s.livesUsed)
         val score = scoring.levelScore(par, play, ScoringParams(lifeCap = cfg.lifeCap, baseScore = cfg.baseScore))
 
         scores.save(
             LevelScoreRow(
                 runId = run.id!!, levelConfigId = cfg.id!!, moves = MoveCodec.encode(s.moves),
                 movesCount = s.scoredMoves, parMoves = parMoves, activeTimeMs = s.activeMs,
-                livesUsed = 0, score = score,
+                livesUsed = s.livesUsed, score = score,
             ),
         )
         val next = run.currentLevel + 1
@@ -287,13 +356,18 @@ internal class LevelSession(val boardId: Long, val seed: Long, val config: Level
     var scoredMoves = 0 // ADR-0018: reveal/chord yang membuka = 1; flag = 0
     var activeMs = 0L
     var lastTick = System.currentTimeMillis()
-    var dead = false // kena bom, menunggu nyawa (T-023)
+    var dead = false // kena bom, menunggu nyawa (ADR-0037)
+    var deadAt: CellIndex? = null // bom yang meledak (utk chord ≠ sel yang di-tap) → di-flag saat nyawa dipakai
+    var livesUsed = 0 // dihitung ulang dari log saat replay (ADR-0037) → penalti skor ADR-0017
 
     fun absorb(cells: List<RevealedCell>): List<RevealedCell> {
         cells.forEach { revealed[it.index] = it.adjacentMines }
         return cells
     }
 }
+
+// Hasil `locate()` — destructuring di pemanggil (`val (user, run, cfg, row) = ...`).
+private data class Located(val user: AppUserRow, val run: RunRow, val cfg: LevelConfigRow, val row: BoardRow)
 
 private class Outcome(
     val move: Move,

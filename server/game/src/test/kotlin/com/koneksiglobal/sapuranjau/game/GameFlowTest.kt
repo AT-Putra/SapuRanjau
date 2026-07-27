@@ -4,6 +4,7 @@ import com.koneksiglobal.sapuranjau.engine.CellIndex
 import com.koneksiglobal.sapuranjau.engine.LevelConfig
 import com.koneksiglobal.sapuranjau.engine.MinesweeperEngine
 import com.koneksiglobal.sapuranjau.engine.RevealResult
+import com.koneksiglobal.sapuranjau.lives.Wallet
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -61,7 +62,7 @@ class GameFlowTest {
 
     @BeforeEach
     fun seedPeriodDanLevel() {
-        jdbc.sql("TRUNCATE level_score, board, run, level_config, period, app_user RESTART IDENTITY CASCADE").update()
+        jdbc.sql("TRUNCATE life_ledger, level_score, board, run, level_config, period, app_user RESTART IDENTITY CASCADE").update()
         val periodId = jdbc.sql(
             "INSERT INTO period (name, starts_at, ends_at, status) " +
                 "VALUES ('test', now(), now() + interval '30 days', 'ACTIVE') RETURNING id",
@@ -105,6 +106,22 @@ class GameFlowTest {
             .header("Authorization", "Bearer dev:pemain-1")
             .body(ActionRequest(runId, 0, action, CellDto(c.x, c.y)))
             .retrieve().body(ActionResponse::class.java)!!
+
+    private fun useLife(runId: String, level: Int = 0, uid: String = "pemain-1"): Resp =
+        client.post().uri("/v1/tournament/life/use")
+            .header("Authorization", "Bearer dev:$uid")
+            .body(UseLifeRequest(runId, level))
+            .exchange { _, res -> Resp(res.statusCode.value(), res.bodyTo(String::class.java)) }
+
+    private fun useLifeOk(runId: String, level: Int = 0): UseLifeResponse =
+        client.post().uri("/v1/tournament/life/use")
+            .header("Authorization", "Bearer dev:pemain-1")
+            .body(UseLifeRequest(runId, level))
+            .retrieve().body(UseLifeResponse::class.java)!!
+
+    private fun wallet(uid: String = "pemain-1"): Wallet =
+        client.get().uri("/v1/wallet")
+            .header("Authorization", "Bearer dev:$uid").retrieve().body(Wallet::class.java)!!
 
     private fun revealSeed(boardId: String, uid: String = "pemain-1"): Resp =
         client.get().uri("/v1/tournament/level/$boardId/reveal")
@@ -227,6 +244,129 @@ class GameFlowTest {
         assertEquals("active", statusBoard(s.boardId))
         assertEquals(0, jdbc.sql("SELECT count(*) FROM level_score").query(Long::class.java).single().toInt())
         assertEquals(409, act(s.runId, 0, MoveAction.REVEAL, CellIndex(4, 4)).status, "aksi lain ditolak")
+        assertTrue(start().awaitingLife)
+    }
+
+    // ── Nyawa (T-023, ADR-0008/0037) ─────────────────────────────────────────────────────────────
+
+    // Menghidupkan level sampai kena bom ke-`ke`; balas daftar bom papan itu.
+    private fun sampaiKenaBom(s: StartResponse, ke: Int = 0): List<CellIndex> {
+        val mines = minesOf(s.boardId).toList()
+        if (ke == 0) actOk(s.runId, MoveAction.REVEAL, first)
+        assertEquals(ActionResult.HIT_MINE, actOk(s.runId, MoveAction.REVEAL, mines[ke]).result)
+        return mines
+    }
+
+    @Test
+    fun `pakai nyawa melanjutkan level di tempat dan menandai bom yang meledak`() {
+        val s = startTerkunci()
+        val mines = sampaiKenaBom(s)
+
+        val r = useLifeOk(s.runId)
+        assertEquals(1, r.livesUsed)
+        assertEquals(3, r.lifeCap)
+        assertEquals(1, r.freeLives, "2 FreeLife periode (GDD §7.2) dikurangi 1")
+        assertEquals(0, r.paidLives)
+
+        // Level lanjut DI TEMPAT (bukan rewind/restart): aksi diterima lagi, board tetap aktif.
+        assertEquals("active", statusBoard(s.boardId))
+        val lanjut = allCells().first { it !in mines && actOk(s.runId, MoveAction.REVEAL, it).result == ActionResult.REVEALED }
+        assertTrue(lanjut !in mines)
+        // Bom penyebab mati kini terflag → tak bisa membunuh dua kali dengan nyawa yang sama.
+        assertEquals(ActionResult.NO_OP, actOk(s.runId, MoveAction.REVEAL, mines[0]).result)
+        assertEquals(1, start().flags.count { it.x == mines[0].x && it.y == mines[0].y })
+
+        val used = jdbc.sql("SELECT type, used_in_run_id FROM life_ledger WHERE status = 'used'").query().singleRow()
+        assertEquals("free", used["type"])
+        assertEquals(s.runId.toLong(), used["used_in_run_id"])
+    }
+
+    // FIFO-expiry (ADR-0008): yang paling cepat hangus dipakai dulu. Nyawa `paid` sengaja dibuat
+    // LEBIH DULU (id lebih kecil) — kalau urutannya jatuh ke id, paid yang terbakar dan test gagal.
+    @Test
+    fun `nyawa dipakai FIFO-expiry — free hangus lebih dulu daripada paid carry-over`() {
+        val s = startTerkunci()
+        val userId = jdbc.sql("SELECT id FROM app_user WHERE firebase_uid = 'pemain-1'").query(Long::class.java).single()
+        jdbc.sql("INSERT INTO life_ledger (user_id, type, source, expiry) VALUES (?, 'paid', 'purchase', NULL)")
+            .param(userId).update()
+        sampaiKenaBom(s)
+
+        val r = useLifeOk(s.runId)
+        assertEquals(1, r.freeLives)
+        assertEquals(1, r.paidLives, "paid tak tersentuh selama masih ada free")
+        assertEquals("free", jdbc.sql("SELECT type FROM life_ledger WHERE status = 'used'").query(String::class.java).single())
+    }
+
+    @Test
+    fun `nyawa habis membalas 409 dan level tetap menunggu nyawa`() {
+        val s = startTerkunci()
+        val mines = sampaiKenaBom(s)
+        useLifeOk(s.runId)
+        assertEquals(ActionResult.HIT_MINE, actOk(s.runId, MoveAction.REVEAL, mines[1]).result)
+        assertEquals(2, useLifeOk(s.runId).livesUsed)
+        assertEquals(ActionResult.HIT_MINE, actOk(s.runId, MoveAction.REVEAL, mines[2]).result)
+
+        val habis = useLife(s.runId) // 2 FreeLife periode sudah terbakar, grant tak berulang
+        assertEquals(409, habis.status, "body: ${habis.body}")
+        assertTrue(habis.body!!.contains("\"code\":\"CONFLICT\""), "body: ${habis.body}")
+        assertTrue(start().awaitingLife, "tetap menunggu nyawa — tak ada nyawa hantu")
+        assertEquals(0, wallet().free + wallet().paid)
+        assertEquals(2, jdbc.sql("SELECT lives_used FROM run WHERE id = ?").param(s.runId.toLong())
+            .query(Int::class.java).single(), "tie-breaker ADR-0009 menghitung nyawa walau level belum tuntas")
+    }
+
+    @Test
+    fun `progres setelah pakai nyawa selamat walau cache sesi hilang (ADR-0036)`() {
+        val s = startTerkunci()
+        val mines = sampaiKenaBom(s)
+        useLifeOk(s.runId)
+
+        game.evictAllSessions() // setara restart server: state dibangun ulang dari log langkah
+
+        val resume = start()
+        assertTrue(!resume.awaitingLife, "USE_LIFE di log → pemain hidup lagi setelah replay")
+        assertEquals(listOf(CellDto(mines[0].x, mines[0].y)), resume.flags)
+        assertEquals(2, resume.movesCount, "reveal pertama + reveal bom; USE_LIFE 0 langkah (ADR-0018)")
+        assertEquals(ActionResult.NO_OP, actOk(s.runId, MoveAction.REVEAL, mines[0]).result)
+    }
+
+    // Penalti nyawa ADR-0017 benar-benar sampai ke scoring: lifeCap=1 → 1 nyawa = skor level 0.
+    @Test
+    fun `nyawa tercatat di level_score dan menolkan skor saat mencapai lifeCap`() {
+        jdbc.sql("UPDATE level_config SET life_cap = 1 WHERE level_index = 0").update()
+        val s = startTerkunci()
+        sampaiKenaBom(s)
+        useLifeOk(s.runId)
+
+        assertEquals(LevelStatus.LEVEL_CLEARED, tuntaskanLevel(s).status)
+
+        val row = jdbc.sql("SELECT lives_used, score FROM level_score WHERE run_id = ?")
+            .param(s.runId.toLong()).query().singleRow()
+        assertEquals(1, row["lives_used"])
+        assertEquals(0, row["score"], "livesUsed >= lifeCap → penalti nol (ADR-0017)")
+        assertEquals(1, jdbc.sql("SELECT lives_used FROM run WHERE id = ?").param(s.runId.toLong())
+            .query(Int::class.java).single())
+    }
+
+    @Test
+    fun `wallet memberi 2 FreeLife sekali per periode (grant malas idempoten)`() {
+        val a = wallet()
+        assertEquals(2, a.free, "GDD §7.2")
+        assertEquals(0, a.paid)
+        assertTrue(a.nextExpiry != null, "FreeLife hangus di akhir periode (ADR-0008)")
+
+        assertEquals(2, wallet().free, "panggilan kedua tak mencetak nyawa baru")
+        assertEquals(2, jdbc.sql("SELECT count(*) FROM life_ledger").query(Long::class.java).single().toInt())
+    }
+
+    // USE_LIFE hidup di log langkah, bukan di alfabet aksi klien: lewat /action ia akan melewati
+    // pemotongan nyawa (ADR-0037).
+    @Test
+    fun `USE_LIFE lewat endpoint action ditolak 400`() {
+        val s = startTerkunci()
+        sampaiKenaBom(s)
+        val r = act(s.runId, 0, MoveAction.USE_LIFE, first)
+        assertEquals(400, r.status, "body: ${r.body}")
         assertTrue(start().awaitingLife)
     }
 
