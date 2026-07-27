@@ -4,6 +4,7 @@ build/
 **/build/
 !src/**/build/
 .kotlin/
+__pycache__/
 local.properties
 *.apk
 *.aab
