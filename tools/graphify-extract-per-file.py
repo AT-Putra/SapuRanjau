@@ -14,9 +14,18 @@ they come back as `unknown_adr_0032`, `release_dokumen` and friends.
 Prereqs: env from .claude/settings.local.json (OPENAI_BASE_URL, OPENAI_API_KEY,
 OPENAI_MODEL, GRAPHIFY_MAX_OUTPUT_TOKENS) and `python tools/graphify-patch-lang.py`.
 
-Guard: a file whose node count comes back below what the graph already has
-restores the graph, drops the cache entries that run wrote, and stops the loop.
-Usage: python tools/graphify-extract-per-file.py
+Guard: a file coming back below FLOOR_TOLERANCE of what the RUNNING graph held a
+moment earlier restores the graph, drops the cache entries that run wrote, and
+stops the loop. The floor is re-read per iteration and allows a little slack —
+cross-file dedup merges duplicate nodes on every `extract` call, so per-file
+counts drift down a percent or two with nothing lost.
+
+Do NOT "simplify" this by deleting graphify-out and rebuilding from zero: with no
+graph on disk graphify ignores the manifest and extracts the whole corpus in one
+pass (65k tokens, 2 chunks, 980 -> 295 nodes on 2026-07-27). Per-file isolation
+depends on an existing graph.
+
+Usage: python tools/graphify-extract-per-file.py [--only docs/06.md ...]
 """
 import hashlib
 import json
@@ -32,9 +41,18 @@ GRAPH = OUT / "graph.json"
 MANIFEST = OUT / "manifest.json"
 LOOP_BAK = OUT / ".loop-bak.json"
 CACHE = OUT / "cache" / "semantic"  # hasil ekstraksi ber-kunci konten file
+
+# Berapa banyak penyusutan per-file yang masih dianggap wajar. Dedup lintas-file melebur node
+# duplikat tiap kali `extract` dipanggil, jadi hitungan per-file memang bergeser turun sedikit
+# tanpa ada yang hilang — terukur 2026-07-27: AGENTS.md 64->63 (-1,6%) di iterasi yang bahkan
+# TIDAK memanggil LLM. Keruntuhan sungguhan jauh di luar itu (RELEASE.md 125->31 = -75%).
+# Ambang 10% duduk di jurang antara keduanya.
+FLOOR_TOLERANCE = 0.9
 GRAPHIFY = pathlib.Path(os.environ["USERPROFILE"]) / ".local/bin/graphify.exe"
 
 def counts() -> Counter:
+    if not GRAPH.exists():   # rebuild bersih: graph belum ada sampai file pertama diekstrak
+        return Counter()
     g = json.loads(GRAPH.read_text(encoding="utf-8"))
     return Counter(n.get("source_file") for n in g["nodes"])
 
@@ -141,14 +159,33 @@ changed = sync_manifest()
 print(f"manifest disinkronkan: {len(changed)} file berubah sejak ekstraksi terakhir"
       + (" -> " + ", ".join(changed) if changed else ""), flush=True)
 
-# Floor = what the graph holds right now; no file may come back thinner than it is.
-before = counts()
+# Urutan kerja saja (file gemuk dulu) — bukan sumber floor.
+initial = counts()
 targets = sorted((f for f in json.loads(MANIFEST.read_text(encoding="utf-8"))),
-                 key=lambda f: -before.get(f, 0))
+                 key=lambda f: -initial.get(f, 0))
+
+# `--only a.md b.md`: ekstrak ulang hanya file yang memang basi. Graph = cache navigasi yang boleh
+# sengaja lag (CLAUDE.md), jadi memaksa 12 file padahal 5 yang berubah cuma membakar uang dan
+# memberi 7 kesempatan tambahan bagi variasi LLM untuk menjatuhkan guard.
+if "--only" in sys.argv:
+    picked = [a for a in sys.argv[sys.argv.index("--only") + 1:] if not a.startswith("--")]
+    unknown = [p for p in picked if p not in targets]
+    if unknown:
+        sys.exit(f"--only: tak ada di manifest: {', '.join(unknown)}")
+    targets = [t for t in targets if t in picked]
+    print(f"--only: {len(targets)} file dari {len(initial)} — {', '.join(targets)}", flush=True)
 
 for i, rel in enumerate(targets, 1):
-    floor = before.get(rel, 0)
-    LOOP_BAK.write_bytes(GRAPH.read_bytes())
+    # Floor diambil dari graph BERJALAN, bukan snapshot awal loop. Dedup lintas-file memindahkan
+    # node antar-file secara sah tiap kali file lain diekstrak ulang, jadi snapshot awal makin
+    # basi di iterasi belakangan dan guard menyala tanpa sebab. Terbukti 2026-07-27: AGENTS.md
+    # 64 -> 63 padahal hasilnya datang dari CACHE (`semantic cache: 1 hit`, `0 re-extracted`) —
+    # ekstraksinya byte-identik dengan yang tadi menghasilkan 64, yang bergeser cuma atribusi
+    # dedup. Guard memblokir iterasi yang tak mengekstrak apa pun.
+    # Keruntuhan asli tetap tertangkap: hasil rusak anjlok dibanding keadaan beberapa detik lalu.
+    floor = counts().get(rel, 0)
+    if GRAPH.exists():
+        LOOP_BAK.write_bytes(GRAPH.read_bytes())
     m = json.loads(MANIFEST.read_text(encoding="utf-8"))
     m.pop(rel, None)                       # mark this one file as "changed"
     MANIFEST.write_text(json.dumps(m, indent=2), encoding="utf-8")
@@ -168,11 +205,11 @@ for i, rel in enumerate(targets, 1):
 
     got = counts().get(rel, 0)
     print(f"    -> {rel}: {floor} -> {got} nodes", flush=True)
-    if got < floor:
+    if got < floor * FLOOR_TOLERANCE:
         GRAPH.write_bytes(LOOP_BAK.read_bytes())
         dropped = drop_new_cache(cache_before)
-        sys.exit(f"STOP: {rel} shrank ({floor} -> {got}); graph restored, "
-                 f"{dropped} cache entry dibuang — jalankan ulang untuk mencoba lagi.")
+        sys.exit(f"STOP: {rel} menyusut {floor} -> {got} (di bawah {FLOOR_TOLERANCE:.0%} floor); "
+                 f"graph dipulihkan, {dropped} cache entry dibuang — jalankan ulang untuk mencoba lagi.")
 
 final = counts()
 print("\nDONE. per-file counts:", flush=True)
@@ -185,4 +222,5 @@ print("TOTAL", sum(final.values()), flush=True)
 print("\n=== dedup lintas-file ===", flush=True)
 subprocess.run([sys.executable, str(pathlib.Path(__file__).with_name("graphify-dedup-crossfile.py")),
                 "--apply"], cwd=ROOT, check=True)
+
 print("\nnext: graphify cluster-only . --backend openai && graphify label . --backend openai")
