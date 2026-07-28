@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Casual jalan sepenuhnya offline (ADR-0030) → belum ada izin INTERNET di fase ini.
+         Ditambahkan saat `client/data` menyentuh server (T-035). -->
+
+    <application
+        android:label="Sapu Ranjau"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.SapuRanjau">
+
+        <!-- Ikon launcher belum disetel: aset final milik T-051 (ADR-0029/0042). -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:label="Sapu Ranjau"
+            android:theme="@style/Theme.SapuRanjau">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

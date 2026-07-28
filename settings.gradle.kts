@@ -32,6 +32,10 @@ include(":server:billing")
 include(":server:tournament")
 include(":server:audit")
 include(":server:integrity")
+// client/ — Android + Compose (ADR-0001), fase client dibuka ADR-0042 (palet/token)
+include(":client:app")
+include(":client:ui-kit")
+include(":client:feature-casual")
 //
 // Ditambah per-task saat diklaim (docs/04_TASKS.md) — tiap penambahan = 1 baris + 1 build.gradle.kts 3-baris:
 //   shared:  contracts

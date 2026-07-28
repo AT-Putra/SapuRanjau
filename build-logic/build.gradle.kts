@@ -9,4 +9,7 @@ dependencies {
     implementation(libs.kotlin.allopen)
     implementation(libs.springBoot.gradlePlugin)
     implementation(libs.springDependencyManagement.gradlePlugin)
+    // Fase client: convention android-* memanggil id("com.android.…") & plugin Compose tanpa versi.
+    implementation(libs.android.gradlePlugin)
+    implementation(libs.kotlin.composePlugin)
 }

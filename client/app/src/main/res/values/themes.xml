@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Tema WINDOW saja (latar sebelum Compose menggambar). Tema aplikasi yang sebenarnya ada di
+     `ui-kit` (SapuRanjauTheme, ADR-0042) — jangan menaruh warna merek di sini, nanti ada dua
+     sumber kebenaran yang bisa berbeda. Varian gelap: res/values-night/themes.xml. -->
+<resources>
+    <style name="Theme.SapuRanjau" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">#F4FBF9</item>
+    </style>
+</resources>

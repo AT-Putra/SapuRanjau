@@ -13,7 +13,16 @@ firebaseAdmin = "9.10.0"   # verifikasi Firebase ID token server-side (ADR-0030,
 # OAuth2 service-account → access token utk Play Developer API (ADR-0011/0025, T-025). Sudah ada di
 # graph (transitif firebase-admin); dideklarasikan eksplisit karena `implementation` tak menular.
 googleAuth = "1.49.0"
-# agp = "9.2.0"   # Android Gradle Plugin — diaktifkan saat fase client (modul android pertama)
+# ── Fase client (T-030/T-031) ────────────────────────────────────────────────────────────────────
+# Dicek di maven Google 2026-07-28: AGP `<release>` menunjuk 9.4.0-alpha06 → 9.3.1 stabil terakhir
+# (pola yang sama dengan Kotlin: prerelease diabaikan, ADR-0034 latest-STABLE).
+agp = "9.3.1"
+composeBom = "2026.06.01"          # BOM menyelaraskan seluruh artefak Compose — versi per-artefak jangan dipin
+androidxCore = "1.19.0"
+androidxActivity = "1.13.0"
+androidxLifecycle = "2.11.0"
+# Modul Android tak mewarisi JUnit dari starter Spring → dipin sendiri (stabil terakhir 2026-07-28).
+junitJupiter = "6.1.2"
 
 [libraries]
 # Artefak plugin utk convention plugins (dipakai di build-logic/, bukan modul biasa).
@@ -30,3 +39,18 @@ testcontainers-junit = { module = "org.testcontainers:testcontainers-junit-jupit
 testcontainers-postgresql = { module = "org.testcontainers:testcontainers-postgresql", version.ref = "testcontainers" }
 firebase-admin = { module = "com.google.firebase:firebase-admin", version.ref = "firebaseAdmin" }
 google-auth = { module = "com.google.auth:google-auth-library-oauth2-http", version.ref = "googleAuth" }
+
+# Client (Android + Compose). Artefak plugin dipakai build-logic; sisanya dependency modul.
+android-gradlePlugin = { module = "com.android.tools.build:gradle", version.ref = "agp" }
+kotlin-composePlugin = { module = "org.jetbrains.kotlin:compose-compiler-gradle-plugin", version.ref = "kotlin" }
+compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }
+compose-material3 = { module = "androidx.compose.material3:material3" }
+compose-ui = { module = "androidx.compose.ui:ui" }
+compose-ui-tooling = { module = "androidx.compose.ui:ui-tooling" }
+compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
+androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidxCore" }
+androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidxActivity" }
+androidx-lifecycle-viewmodel-compose = { module = "androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "androidxLifecycle" }
+androidx-lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "androidxLifecycle" }
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junitJupiter" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher", version.ref = "junitJupiter" }
