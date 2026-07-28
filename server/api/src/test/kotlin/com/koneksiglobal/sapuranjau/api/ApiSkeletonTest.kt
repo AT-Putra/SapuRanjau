@@ -1,9 +1,12 @@
 package com.koneksiglobal.sapuranjau.api
 
+import com.koneksiglobal.sapuranjau.api.auth.VerifiedUser
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.autoconfigure.SpringBootApplication
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.client.RestClient
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -14,6 +17,16 @@ import kotlin.test.assertTrue
 @SpringBootApplication
 class ApiTestApp
 
+// Probe MILIK TEST INI. Dulu perannya dipegang `/tournament/status` versi stub, yang pindah ke
+// `server/tournament` begitu ia punya logika nyata (T-026) — `api` tak boleh bergantung pada modul
+// feature. Yang diuji di sini memang spine-nya: filter Bearer → resolver VerifiedUser → prefix /v1
+// → problem+json, bukan turnamennya.
+@RestController
+class SpineProbeController {
+    @GetMapping("/spine/ping")
+    fun ping(user: VerifiedUser) = mapOf("status" to "OK", "uid" to user.uid)
+}
+
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class ApiSkeletonTest {
 
@@ -23,7 +36,7 @@ class ApiSkeletonTest {
     private data class Resp(val status: Int, val body: String?)
 
     private fun getStatus(auth: String?): Resp {
-        var spec = RestClient.create("http://localhost:$port").get().uri("/v1/tournament/status")
+        var spec = RestClient.create("http://localhost:$port").get().uri("/v1/spine/ping")
         if (auth != null) spec = spec.header("Authorization", auth)
         return spec.exchange { _, res -> Resp(res.statusCode.value(), res.bodyTo(String::class.java)) }
     }

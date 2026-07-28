@@ -13,6 +13,8 @@ import com.koneksiglobal.sapuranjau.scoring.LevelPar
 import com.koneksiglobal.sapuranjau.scoring.LevelPlay
 import com.koneksiglobal.sapuranjau.scoring.LevelScoring
 import com.koneksiglobal.sapuranjau.scoring.ScoringParams
+import com.koneksiglobal.sapuranjau.tournament.TournamentGate
+import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpStatus
 import org.springframework.jdbc.core.simple.JdbcClient
@@ -36,10 +38,12 @@ class GameService(
     private val boards: BoardRepo,
     private val scores: LevelScoreRepo,
     private val lives: LifeService, // T-023: konsumsi FIFO-expiry; `game` → `lives`, tak sebaliknya
+    private val gate: TournamentGate, // T-026: periode terkunci / ban / S&K (ADR-0021/0025/0026)
     private val jdbc: JdbcClient,
     // parTimeMs = parMoves × konstanta (05 §2). Tunable (ADR-0017/0036); pindah ke admin-config saat kalibrasi.
     @Value("\${sapuranjau.scoring.ms-per-par-move:2000}") private val msPerParMove: Long,
 ) {
+    private val log = LoggerFactory.getLogger(javaClass)
     private val engine = MinesweeperEngine()
     private val scoring = LevelScoring()
     private val random = SecureRandom()
@@ -64,13 +68,16 @@ class GameService(
     // REVEAL pertama (first-click-safe, ADR-0031). Panggilan ulang = resume level yang sama.
     @Transactional
     fun startLevel(uid: String): StartResponse {
-        val period = activePeriod()
         val user = users.findByFirebaseUid(uid) ?: users.save(AppUserRow(firebaseUid = uid))
-        val run = runs.findByPeriodIdAndUserId(period.id!!, user.id!!)
-            ?: runs.save(RunRow(userId = user.id, periodId = period.id))
+        // Gerbang turnamen (T-026): periode terkunci (ADR-0021), ban refund (ADR-0025), S&K belum
+        // disetujui (ADR-0026) ditolak DI SINI. `GET /tournament/status` cuma menampilkan; kalau
+        // penegakannya cuma di sana, klien yang tak bertanya bisa main tanpa menyetujui apa pun.
+        val periodId = gate.require(user.id!!)
+        val run = runs.findByPeriodIdAndUserId(periodId, user.id)
+            ?: runs.save(RunRow(userId = user.id, periodId = periodId))
         if (run.scoreLocked) throw ApiException(HttpStatus.FORBIDDEN, ErrorCode.CONFLICT, "Skor run ini terkunci.")
 
-        val cfg = levels.findByPeriodIdAndLevelIndex(period.id, run.currentLevel)
+        val cfg = levels.findByPeriodIdAndLevelIndex(periodId, run.currentLevel)
             ?: throw ApiException(HttpStatus.CONFLICT, ErrorCode.CONFLICT, "Semua level periode ini sudah tuntas.")
         check(cfg.gridWidth - 1 <= MoveCodec.MAX_X && cfg.gridHeight - 1 <= MoveCodec.MAX_Y) {
             "level_config ${cfg.id}: grid ${cfg.gridWidth}x${cfg.gridHeight} melebihi jangkauan log langkah"
@@ -162,6 +169,7 @@ class GameService(
     fun useLife(uid: String, req: UseLifeRequest): UseLifeResponse {
         val (user, run, cfg, row) = locate(uid, req.runId, req.levelIndex)
         if (run.scoreLocked) throw ApiException(HttpStatus.FORBIDDEN, ErrorCode.CONFLICT, "Skor run ini terkunci.")
+        gate.require(user.id!!) // membeli/memakai nyawa = titik masuk turnamen juga (T-026)
 
         return onBoard(row.id!!) {
             val s = sessionOf(row, cfg)
@@ -208,10 +216,6 @@ class GameService(
     }
 
     // ── Internal ─────────────────────────────────────────────────────────────────────────────────
-
-    private fun activePeriod(): PeriodRow = periods.findFirstByStatus("ACTIVE")
-        // Gerbang lain (BANNED/CONSENT_REQUIRED, ADR-0025/0026) = T-026; di sini cukup LOCKED.
-        ?: throw ApiException(HttpStatus.CONFLICT, ErrorCode.CONFLICT, "Tak ada periode turnamen aktif.")
 
     private fun notFound(msg: String) = ApiException(HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, msg)
 
@@ -304,16 +308,21 @@ class GameService(
         )
         val next = run.currentLevel + 1
         val allDone = next >= levels.countByPeriodId(run.periodId)
-        runs.save(
-            run.copy(
-                currentLevel = next, // one-shot: maju saja (ADR-0024)
-                totalScore = run.totalScore + score,
-                totalTimeMs = run.totalTimeMs + s.activeMs,
-                totalMoves = run.totalMoves + s.scoredMoves,
-                completedAllAt = if (allDone) Instant.now() else run.completedAllAt, // tie-breaker §8.2 #4
-                updatedAt = Instant.now(),
-            ),
-        )
+
+        // Corong SATU-SATUNYA tempat skor masuk ke agregat `run` (= sumber leaderboard) → syaratnya
+        // dipasang di sini, bukan di tiap endpoint. Menutup dua kebocoran sekaligus (T-026):
+        //   • void/refund di tengah level → `score_locked` sudah true (ADR-0025), skornya tak boleh naik lagi;
+        //   • periode berakhir di tengah level → pemenang sudah ditentukan, agregatnya tak boleh bergerak.
+        // `level_score` tetap ditulis di atas: itu fakta permainan & bahan re-sim, bukan hadiah.
+        val doneClause = if (allDone) "completed_all_at = coalesce(completed_all_at, now()), " else ""
+        val credited = jdbc.sql(
+            "UPDATE run SET current_level = ?, total_score = total_score + ?, total_time_ms = total_time_ms + ?, " +
+                "total_moves = total_moves + ?, ${doneClause}updated_at = now() " +
+                "WHERE id = ? AND score_locked = false " +
+                "AND EXISTS (SELECT 1 FROM period WHERE id = ? AND status = 'ACTIVE')",
+        ).params(next, score.toLong(), s.activeMs, s.scoredMoves, run.id, run.periodId).update()
+        if (credited == 0) log.info("Run ${run.id}: level selesai tapi tak dikreditkan (terkunci / periode tak aktif)")
+
         return score
     }
 

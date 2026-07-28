@@ -13,6 +13,7 @@ dependencies {
     implementation(project(":server:game"))              // orkestrasi run turnamen (T-022)
     implementation(project(":server:lives"))             // dompet nyawa + GET /v1/wallet (T-023)
     implementation(project(":server:billing"))           // verifikasi pembelian + void/ban (T-025)
-    runtimeOnly(project(":server:persistence"))          // migrasi Flyway V1..V16 jalan saat boot
+    implementation(project(":server:tournament"))        // periode, gerbang, leaderboard, pemenang (T-026)
+    runtimeOnly(project(":server:persistence"))          // migrasi Flyway V1..V18 jalan saat boot
     runtimeOnly("org.springframework.boot:spring-boot-flyway") // Boot 4: autoconfig Flyway = modul terpisah
 }

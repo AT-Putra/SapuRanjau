@@ -31,7 +31,11 @@ class GameTestApp
 // Bukti runtime T-022 di Postgres 18 asli: alur start → aksi → skor tercatat, durabilitas progres
 // (ADR-0036: state selamat walau cache sesi hilang), one-shot (ADR-0024), provably-fair (ARCH §6.5).
 @Testcontainers
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(
+    webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+    // Tick periode dimatikan: rollover di latar tak boleh mengubah data di tengah test (T-026).
+    properties = ["sapuranjau.tournament.tick.enabled=false", "sapuranjau.tournament.tnc-version=v1"],
+)
 class GameFlowTest {
 
     companion object {
@@ -62,7 +66,10 @@ class GameFlowTest {
 
     @BeforeEach
     fun seedPeriodDanLevel() {
-        jdbc.sql("TRUNCATE life_ledger, level_score, board, run, level_config, period, app_user RESTART IDENTITY CASCADE").update()
+        jdbc.sql(
+            "TRUNCATE life_ledger, level_score, board, run, level_config, tournament_consent, " +
+                "tournament_ban, audit_event, period, app_user RESTART IDENTITY CASCADE",
+        ).update()
         val periodId = jdbc.sql(
             "INSERT INTO period (name, starts_at, ends_at, status) " +
                 "VALUES ('test', now(), now() + interval '30 days', 'ACTIVE') RETURNING id",
@@ -74,11 +81,19 @@ class GameFlowTest {
             ).params(periodId, i, cfg.gridWidth, cfg.gridHeight, cfg.mineCount).update()
         }
         game.evictAllSessions()
+        // Gerbang S&K (ADR-0026, T-026) berlaku untuk SEMUA jalur turnamen: tanpa persetujuan,
+        // `start` dibalas 403. Test alur permainan menyetujuinya di muka lewat endpoint sungguhan.
+        listOf("pemain-1", "pemain-2").forEach { setujuiSK(it) }
     }
 
     // ── Helper HTTP ──────────────────────────────────────────────────────────────────────────────
 
     private val client get() = RestClient.create("http://localhost:$port")
+
+    private fun setujuiSK(uid: String) {
+        client.post().uri("/v1/tournament/consent").header("Authorization", "Bearer dev:$uid")
+            .body(mapOf("tncVersion" to "v1")).retrieve().toBodilessEntity()
+    }
 
     private fun start(uid: String = "pemain-1"): StartResponse = client.post().uri("/v1/tournament/level/start")
         .header("Authorization", "Bearer dev:$uid").retrieve().body(StartResponse::class.java)!!
@@ -441,4 +456,67 @@ class GameFlowTest {
         assertEquals(404, revealSeed(s.boardId, uid = "pemain-2").status)
         assertEquals(404, act(s.runId, 0, MoveAction.REVEAL, first, uid = "pemain-2").status)
     }
+
+    // ── Gerbang turnamen (T-026) ─────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `tanpa menyetujui S&K, level tak bisa dimulai`() {
+        val r = startRaw("pemain-baru") // belum lewat POST /tournament/consent
+        assertEquals(403, r.status, "body: ${r.body}")
+        assertTrue(r.body!!.contains("\"code\":\"CONSENT_REQUIRED\""), "body: ${r.body}")
+    }
+
+    @Test
+    fun `pemain yang kena ban tak bisa memulai level`() {
+        start() // pastikan barisnya ada
+        jdbc.sql(
+            "INSERT INTO tournament_ban (user_id, reason, period_start_id) " +
+                "SELECT u.id, 'refund', p.id FROM app_user u, period p WHERE u.firebase_uid = 'pemain-1' AND p.status = 'ACTIVE'",
+        ).update()
+
+        val r = startRaw("pemain-1")
+        assertEquals(403, r.status, "body: ${r.body}")
+        assertTrue(r.body!!.contains("\"code\":\"BANNED\""), "body: ${r.body}")
+    }
+
+    // Lubang yang ditutup T-026: `action` sengaja TIDAK digerbang (jalur panas), jadi guardnya ada di
+    // corong skor. Tanpa itu, void di tengah level tetap menambah skor ke run yang sudah dikunci.
+    @Test
+    fun `run terkunci di tengah level - level tercatat tapi skornya tak dikreditkan`() {
+        val s = startTerkunci()
+        actOk(s.runId, MoveAction.REVEAL, first)
+        jdbc.sql("UPDATE run SET score_locked = true WHERE id = ?").param(s.runId.toLong()).update()
+
+        tuntaskanLevel(s)
+
+        val run = jdbc.sql("SELECT current_level, total_score FROM run WHERE id = ?")
+            .param(s.runId.toLong()).query().singleRow()
+        assertEquals(0L, run["total_score"], "skor run terkunci tak boleh naik (ADR-0025)")
+        assertEquals(0, run["current_level"])
+        assertTrue(
+            jdbc.sql("SELECT count(*) FROM level_score WHERE run_id = ?")
+                .param(s.runId.toLong()).query(Int::class.java).single() == 1,
+            "level_score tetap ditulis: itu fakta permainan, bukan hadiah",
+        )
+    }
+
+    @Test
+    fun `periode berakhir di tengah level - skor tak masuk ke agregat`() {
+        val s = startTerkunci()
+        actOk(s.runId, MoveAction.REVEAL, first)
+        jdbc.sql("UPDATE period SET status = 'ENDED' WHERE status = 'ACTIVE'").update()
+
+        tuntaskanLevel(s)
+
+        assertEquals(
+            0L,
+            jdbc.sql("SELECT total_score FROM run WHERE id = ?")
+                .param(s.runId.toLong()).query(Long::class.java).single(),
+            "pemenang periode sudah ditentukan — agregatnya tak boleh bergerak lagi",
+        )
+    }
+
+    private fun startRaw(uid: String): Resp = client.post().uri("/v1/tournament/level/start")
+        .header("Authorization", "Bearer dev:$uid")
+        .exchange { _, res -> Resp(res.statusCode.value(), res.bodyTo(String::class.java)) }
 }

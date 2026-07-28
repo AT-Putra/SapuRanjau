@@ -84,6 +84,14 @@ class LifeService(private val jdbc: JdbcClient) {
         ).params(userId, purchaseId, count).update()
     }
 
+    // Sapuan nyawa yang jatuh tempo — FreeLife terikat periode hangus bersama periodenya (ADR-0008,
+    // `expiry = period.ends_at`). Dipanggil rollover periode (T-026). Ini HIGIENE, bukan koreksi
+    // kebenaran: semua pembacaan sudah menyaring `expiry > now()`. Gunanya menjaga partial index
+    // `life_available` tetap kecil di VM kecil (ADR-0015/0020).
+    @Transactional
+    fun expireLapsed(): Int =
+        jdbc.sql("UPDATE life_ledger SET status = 'expired' WHERE status = 'available' AND expiry <= now()").update()
+
     // Clawback saat purchase di-void (ADR-0025): cabut nyawa dari purchase itu yang MASIH tersisa.
     // Yang sudah dipakai tetap `used` — tak ada saldo minus, lantai 0 datang dari filter `available`
     // ini sendiri, bukan dari aritmetika. Balas jumlah yang tercabut (0 = sudah habis dipakai).
@@ -118,7 +126,7 @@ class LifeService(private val jdbc: JdbcClient) {
     }
 
     private companion object {
-        const val LIVES_PER_PERIOD = 2 // GDD §7.2; tunable → admin-config saat T-026 memegang periode.
+        const val LIVES_PER_PERIOD = 2 // GDD §7.2; tunable → admin-config saat panel ada (T-042).
     }
 }
 

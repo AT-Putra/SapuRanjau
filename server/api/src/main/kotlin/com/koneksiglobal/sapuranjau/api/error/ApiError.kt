@@ -17,7 +17,9 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
 // Spring `ProblemDetail`) + ekstensi `code` app-level yang stabil untuk klien.
 
 // Kode error app-level (field `code`). Tambah anggota saat perlu; JANGAN rename lama (klien pegang).
-enum class ErrorCode { UNAUTHENTICATED, VALIDATION, NOT_FOUND, CONFLICT, INTERNAL }
+// LOCKED/BANNED/CONSENT_REQUIRED (T-026) sengaja dibedakan dari CONFLICT/FORBIDDEN generik: klien
+// memilih LAYAR dari kode ini — popup S&K, pesan ban, atau state "turnamen terkunci" (05 §3).
+enum class ErrorCode { UNAUTHENTICATED, VALIDATION, NOT_FOUND, CONFLICT, INTERNAL, LOCKED, BANNED, CONSENT_REQUIRED }
 
 // Dilempar controller/service utk error terkendali → dipetakan ke ProblemDetail oleh advice.
 class ApiException(val status: HttpStatus, val code: ErrorCode, override val message: String) : RuntimeException(message)

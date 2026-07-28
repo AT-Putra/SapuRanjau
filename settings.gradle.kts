@@ -29,6 +29,7 @@ include(":server:persistence")
 include(":server:game")
 include(":server:lives")
 include(":server:billing")
+include(":server:tournament")
 //
 // Ditambah per-task saat diklaim (docs/04_TASKS.md) — tiap penambahan = 1 baris + 1 build.gradle.kts 3-baris:
 //   shared:  contracts

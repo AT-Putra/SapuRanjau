@@ -1,0 +1,11 @@
+-- app_user.display_name — identitas pemain di leaderboard (T-026, ADR-0039). docs/08_DATA_SCHEMA.md §2.1.
+--
+-- Sebelum ini tak ada apa pun yang bisa ditulis di kolom "pemain" pada leaderboard: app_user hanya
+-- menyimpan firebase_uid + email, dan menyiarkan email ke seluruh pemain = membocorkan PII.
+--
+-- Nullable dan diisi PEMAIN sendiri (PUT /v1/profile/display-name). Server tak pernah membaca claim
+-- `name` dari Firebase ID token — nilai awalnya prefill di klien — jadi lapisan auth tetap
+-- minimal-PII (ADR-0030) dan pemain punya jalan keluar dari nama asli Google-nya. NULL = klien
+-- menampilkan "Pemain #<id>". Tanpa UNIQUE: nama kembar tidak merusak apa pun (peringkat yang
+-- membedakan), sedangkan memaksa unik berarti perlombaan klaim nama sejak hari pertama.
+ALTER TABLE app_user ADD COLUMN display_name text;

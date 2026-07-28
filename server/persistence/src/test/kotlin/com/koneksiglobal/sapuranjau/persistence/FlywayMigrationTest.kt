@@ -29,11 +29,11 @@ class FlywayMigrationTest {
             .load()
 
     // 15 entitas (V1..V15) + V16 progres level berjalan di `board` (ADR-0036, T-022)
-    // + V17 jendela ban terbuka (ADR-0038, T-025).
+    // + V17 jendela ban terbuka (ADR-0038, T-025) + V18 nama tampilan (ADR-0039, T-026).
     @Test
     fun migratesAllVersionsCleanly() {
         val result = flyway().migrate()
-        assertEquals(17, result.migrationsExecuted)
+        assertEquals(18, result.migrationsExecuted)
     }
 
     @Test

@@ -19,9 +19,9 @@ interface AppUserRepo : CrudRepository<AppUserRow, Long> {
 @Table("period")
 data class PeriodRow(@Id val id: Long? = null, val name: String?, val status: String)
 
-interface PeriodRepo : CrudRepository<PeriodRow, Long> {
-    fun findFirstByStatus(status: String): PeriodRow?
-}
+// Periode aktif dicari lewat TournamentGate (T-026), bukan dari sini: `game` cuma perlu membaca
+// status periode sebuah board saat mengungkap seed (ARCH §6.5).
+interface PeriodRepo : CrudRepository<PeriodRow, Long>
 
 @Table("level_config")
 data class LevelConfigRow(
