@@ -8,6 +8,7 @@ import com.koneksiglobal.sapuranjau.engine.CellIndex
 import com.koneksiglobal.sapuranjau.engine.LevelConfig
 import com.koneksiglobal.sapuranjau.engine.MinesweeperEngine
 import com.koneksiglobal.sapuranjau.engine.RevealResult
+import com.koneksiglobal.sapuranjau.integrity.IntegrityGate
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpStatus
 import org.springframework.jdbc.core.simple.JdbcClient
@@ -27,6 +28,7 @@ class CasualClaimService(
     private val lives: LifeService,
     private val jdbc: JdbcClient,
     private val audit: AuditService, // T-027: satu penulis audit_event utk seluruh server
+    private val integrity: IntegrityGate, // T-028: gerbang device (ADR-0023/0041)
     // Kebijakan earn (ADR-0023) — default = angka ADR, tunable, pindah ke admin-config saat panel
     // ada (T-042), pola sama dengan `ms-per-par-move` (ADR-0036). **Lantai legal §9.5: jangan
     // turunkan cap tanpa pertimbangan hukum — 1/5/10 sudah dekat lantai.**
@@ -45,6 +47,9 @@ class CasualClaimService(
     fun claim(uid: String, req: CasualClaimRequest): CasualClaimResponse {
         validate(req)
         val userId = lives.userIdOf(uid)
+        // Gerbang device (ADR-0023 memang menuntutnya di sini; mekanismenya ADR-0041/T-028). Nyawa
+        // hasil klaim bisa dipakai di turnamen berhadiah → titik cetak nilai, bukan sekadar baca.
+        integrity.require(userId)
         lives.lockUser(userId) // cek-cap lalu cetak harus atomik per pemain
 
         if (!meetsThreshold(req)) return respond(userId, ClaimResult.BELOW_THRESHOLD)

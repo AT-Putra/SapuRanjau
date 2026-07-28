@@ -10,6 +10,7 @@ import com.koneksiglobal.sapuranjau.engine.LevelConfig
 import com.koneksiglobal.sapuranjau.engine.MinesweeperEngine
 import com.koneksiglobal.sapuranjau.engine.RevealResult
 import com.koneksiglobal.sapuranjau.engine.RevealedCell
+import com.koneksiglobal.sapuranjau.integrity.IntegrityGate
 import com.koneksiglobal.sapuranjau.lives.LifeService
 import com.koneksiglobal.sapuranjau.scoring.LevelPar
 import com.koneksiglobal.sapuranjau.scoring.LevelPlay
@@ -42,6 +43,7 @@ class GameService(
     private val lives: LifeService, // T-023: konsumsi FIFO-expiry; `game` → `lives`, tak sebaliknya
     private val gate: TournamentGate, // T-026: periode terkunci / ban / S&K (ADR-0021/0025/0026)
     private val anomali: LevelAnomalyDetector, // T-027: flag bot saat level ditutup
+    private val integrity: IntegrityGate, // T-028: gerbang device Play Integrity (ADR-0041)
     private val jdbc: JdbcClient,
     // parTimeMs = parMoves × konstanta (05 §2). Tunable (ADR-0017/0036); pindah ke admin-config saat kalibrasi.
     @Value("\${sapuranjau.scoring.ms-per-par-move:2000}") private val msPerParMove: Long,
@@ -76,6 +78,7 @@ class GameService(
         // disetujui (ADR-0026) ditolak DI SINI. `GET /tournament/status` cuma menampilkan; kalau
         // penegakannya cuma di sana, klien yang tak bertanya bisa main tanpa menyetujui apa pun.
         val periodId = gate.require(user.id!!)
+        integrity.require(user.id) // gerbang device (T-028, ADR-0041) — hanya di titik masuk
         val run = runs.findByPeriodIdAndUserId(periodId, user.id)
             ?: runs.save(RunRow(userId = user.id, periodId = periodId))
         if (run.scoreLocked) throw ApiException(HttpStatus.FORBIDDEN, ErrorCode.CONFLICT, "Skor run ini terkunci.")
@@ -173,6 +176,7 @@ class GameService(
         val (user, run, cfg, row) = locate(uid, req.runId, req.levelIndex)
         if (run.scoreLocked) throw ApiException(HttpStatus.FORBIDDEN, ErrorCode.CONFLICT, "Skor run ini terkunci.")
         gate.require(user.id!!) // membeli/memakai nyawa = titik masuk turnamen juga (T-026)
+        integrity.require(user.id) // T-028
 
         return onBoard(row.id!!) {
             val s = sessionOf(row, cfg)

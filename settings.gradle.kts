@@ -31,6 +31,7 @@ include(":server:lives")
 include(":server:billing")
 include(":server:tournament")
 include(":server:audit")
+include(":server:integrity")
 //
 // Ditambah per-task saat diklaim (docs/04_TASKS.md) — tiap penambahan = 1 baris + 1 build.gradle.kts 3-baris:
 //   shared:  contracts

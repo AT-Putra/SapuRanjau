@@ -89,7 +89,7 @@ class GameFlowTest {
         game.evictAllSessions()
         // Gerbang S&K (ADR-0026, T-026) berlaku untuk SEMUA jalur turnamen: tanpa persetujuan,
         // `start` dibalas 403. Test alur permainan menyetujuinya di muka lewat endpoint sungguhan.
-        listOf("pemain-1", "pemain-2").forEach { setujuiSK(it) }
+        listOf("pemain-1", "pemain-2").forEach { setujuiSK(it); attest(it) }
     }
 
     // ── Helper HTTP ──────────────────────────────────────────────────────────────────────────────
@@ -99,6 +99,13 @@ class GameFlowTest {
     private fun setujuiSK(uid: String) {
         client.post().uri("/v1/tournament/consent").header("Authorization", "Bearer dev:$uid")
             .body(mapOf("tncVersion" to "v1")).retrieve().toBodilessEntity()
+    }
+
+    // Gerbang device (T-028): titik masuk turnamen menolak pemain yang belum attest. Verifier default
+    // = stub (dev), jadi token apa pun yang tak kosong lulus.
+    private fun attest(uid: String) {
+        client.post().uri("/v1/integrity").header("Authorization", "Bearer dev:$uid")
+            .body(mapOf("token" to "dev-token")).retrieve().toBodilessEntity()
     }
 
     private fun start(uid: String = "pemain-1"): StartResponse = client.post().uri("/v1/tournament/level/start")
@@ -520,6 +527,20 @@ class GameFlowTest {
                 .param(s.runId.toLong()).query(Long::class.java).single(),
             "pemenang periode sudah ditentukan — agregatnya tak boleh bergerak lagi",
         )
+    }
+
+    // T-028: sudah setuju S&K tapi perangkatnya belum diperiksa → ditolak dengan kode yang BERBEDA
+    // dari device yang gagal, karena klien tinggal memanggil /v1/integrity lalu mengulang.
+    @Test
+    fun `belum attest device, level tak bisa dimulai`() {
+        setujuiSK("pemain-3") // consent lolos, integrity belum
+
+        val r = startRaw("pemain-3")
+        assertEquals(403, r.status, "body: ${r.body}")
+        assertTrue(r.body!!.contains("\"code\":\"INTEGRITY_REQUIRED\""), "body: ${r.body}")
+
+        attest("pemain-3")
+        assertEquals(200, startRaw("pemain-3").status, "setelah attest, jalur turnamen terbuka")
     }
 
     // T-027: level ditutup → sinyal anomali tertulis ke audit_event, tanpa memblokir permainan.

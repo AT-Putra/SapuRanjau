@@ -65,6 +65,14 @@ class CasualClaimTest {
             "INSERT INTO period (name, starts_at, ends_at, status) " +
                 "VALUES ('test', now(), now() + interval '30 days', 'ACTIVE')",
         ).update()
+        // Klaim casual digate Play Integrity (ADR-0023; mekanismenya T-028/ADR-0041). Verifier
+        // default = stub dev → token apa pun yang tak kosong lulus.
+        attest("pemain-1")
+    }
+
+    private fun attest(uid: String) {
+        client.post().uri("/v1/integrity").header("Authorization", "Bearer dev:$uid")
+            .body(mapOf("token" to "dev-token")).retrieve().toBodilessEntity()
     }
 
     // ── Helper ───────────────────────────────────────────────────────────────────────────────────
@@ -214,6 +222,15 @@ class CasualClaimTest {
         assertEquals("casual_claim_anomaly", row["event_type"])
         assertTrue(row["actor_id"] != null)
         assertTrue(row["detail"].toString().contains("too_fast"), "detail: ${row["detail"]}")
+    }
+
+    // T-028: nyawa hasil klaim bisa dipakai di turnamen berhadiah → ADR-0023 menggate titik ini.
+    @Test
+    fun `klaim dari perangkat yang belum diperiksa ditolak 403`() {
+        val r = claimRaw(permintaan(), uid = "pemain-belum-attest")
+        assertEquals(403, r.status, "body: ${r.body}")
+        assertTrue(r.body!!.contains("\"code\":\"INTEGRITY_REQUIRED\""), "body: ${r.body}")
+        assertEquals(0, nyawa("earn_casual"), "tak ada nyawa tercetak dari perangkat yang belum lolos")
     }
 
     @Test
