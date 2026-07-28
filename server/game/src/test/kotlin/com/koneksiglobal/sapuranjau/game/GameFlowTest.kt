@@ -40,6 +40,8 @@ class GameTestApp
         // modul ini adalah kabelnya (level ditutup → flag tertulis), bukan angka ambangnya
         // (itu unit test `LevelAnomalyTest`). Tanpa ini, hasilnya bergantung kecepatan mesin.
         "sapuranjau.audit.min-ms-per-move=100000",
+        // `game` → `tournament` → PiiCipher: server memang menolak boot tanpa kunci PII (T-029).
+        "sapuranjau.pii.key=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
     ],
 )
 class GameFlowTest {

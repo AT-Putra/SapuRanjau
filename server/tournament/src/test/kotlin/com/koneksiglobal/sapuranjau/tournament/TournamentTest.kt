@@ -31,7 +31,11 @@ class TournamentTestApp
 @Testcontainers
 @SpringBootTest(
     webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-    properties = ["sapuranjau.tournament.tick.enabled=false", "sapuranjau.tournament.tnc-version=v1"],
+    properties = [
+        "sapuranjau.tournament.tick.enabled=false", "sapuranjau.tournament.tnc-version=v1",
+        // Server menolak boot tanpa kunci PII (T-029) — test pun harus menyediakannya.
+        "sapuranjau.pii.key=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+    ],
 )
 class TournamentTest {
 
@@ -55,6 +59,7 @@ class TournamentTest {
     @Autowired private lateinit var jdbc: JdbcClient
     @Autowired private lateinit var periods: PeriodService
     @Autowired private lateinit var winners: WinnerService
+    @Autowired private lateinit var pii: PiiCipher
 
     @BeforeEach
     fun bersihkan() {
@@ -82,6 +87,33 @@ class TournamentTest {
     private fun leaderboard(query: String = "", uid: String = "pemain-1"): LeaderboardResponse =
         client.get().uri("/v1/leaderboard$query").header("Authorization", "Bearer dev:$uid")
             .retrieve().body(LeaderboardResponse::class.java)!!
+
+    private fun klaim(body: Map<String, String>, uid: String = "pemain-1"): Resp =
+        client.post().uri("/v1/prizes/claim").header("Authorization", "Bearer dev:$uid").body(body)
+            .exchange { _, res -> Resp(res.statusCode.value(), res.bodyTo(String::class.java)) }
+
+    private fun inbox(uid: String = "pemain-1"): MessagesResponse =
+        client.get().uri("/v1/messages").header("Authorization", "Bearer dev:$uid")
+            .retrieve().body(MessagesResponse::class.java)!!
+
+    private fun tandaiBaca(id: String, uid: String = "pemain-1"): Resp =
+        client.post().uri("/v1/messages/$id/read").header("Authorization", "Bearer dev:$uid")
+            .exchange { _, res -> Resp(res.statusCode.value(), res.bodyTo(String::class.java)) }
+
+    // Pesan hanya bisa dibuat admin (ADR-0021) dan panelnya belum ada → test menaruhnya langsung.
+    private fun pesan(userId: Long, body: String): Long =
+        jdbc.sql("INSERT INTO message (user_id, admin_id, body) VALUES (?, 1, ?) RETURNING id")
+            .params(userId, body).query(Long::class.java).single()
+
+    // Satu pemenang aktif berhadiah, siap mengklaim.
+    private fun juaraDenganHadiah(uid: String = "pemain-1"): Long {
+        val p = periode("p", -10, 0, status = "ENDED")
+        hadiah(p, 3)
+        val u = pemain(uid)
+        run(u, p, skor = 500)
+        winners.finalizePeriod(p)
+        return u
+    }
 
     private fun setName(name: String, uid: String = "pemain-1"): Resp =
         client.put().uri("/v1/profile/display-name").header("Authorization", "Bearer dev:$uid")
@@ -369,6 +401,100 @@ class TournamentTest {
             jdbc.sql("SELECT display_name FROM app_user WHERE firebase_uid = 'pemain-1'")
                 .query(String::class.java).optional().orElse(null),
         )
+    }
+
+    // ── Klaim hadiah & inbox (T-029, ADR-0021) ───────────────────────────────────────────────────
+
+    @Test
+    fun `pemenang mengklaim hadiah - PII tersimpan terenkripsi, audit tanpa isinya`() {
+        val u = juaraDenganHadiah()
+
+        val r = klaim(mapOf("phone" to "081234567890", "ewallet" to "081234567890 (DANA)"))
+        assertEquals(200, r.status, "body: ${r.body}")
+
+        val row = jdbc.sql("SELECT phone_enc, ewallet_enc, address_enc, status FROM prize_claim").query().singleRow()
+        assertEquals("pending", row["status"])
+        assertEquals(null, row["address_enc"], "alamat tak diisi → tetap NULL")
+        val phoneEnc = String(row["phone_enc"] as ByteArray, Charsets.ISO_8859_1)
+        assertTrue(!phoneEnc.contains("081234567890"), "nomor HP tak boleh tersimpan apa adanya")
+        // Kunci uji ada di properti test → nilai aslinya harus kembali utuh.
+        assertEquals("081234567890", pii.decrypt(row["phone_enc"] as ByteArray))
+
+        val detail = jdbc.sql("SELECT detail::text AS d FROM audit_event WHERE event_type = 'prize_claim_saved'")
+            .query(String::class.java).single()
+        assertTrue(!detail.contains("081234567890"), "audit append-only tak boleh jadi salinan PII: $detail")
+        assertTrue(detail.contains("phone") && detail.contains("ewallet"), "detail: $detail")
+    }
+
+    @Test
+    fun `klaim tanpa e-wallet maupun alamat ditolak — tak ada yang bisa dibayar`() {
+        juaraDenganHadiah()
+        assertEquals(400, klaim(mapOf("phone" to "081234567890")).status)
+    }
+
+    @Test
+    fun `nomor HP ngawur ditolak`() {
+        juaraDenganHadiah()
+        assertEquals(400, klaim(mapOf("phone" to "bukan-nomor", "ewallet" to "x")).status)
+    }
+
+    @Test
+    fun `yang belum pernah menang tak bisa mengklaim`() {
+        periode("p", 0, 7, status = "ACTIVE")
+        assertEquals(409, klaim(mapOf("phone" to "081234567890", "ewallet" to "DANA")).status)
+    }
+
+    @Test
+    fun `klaim boleh diperbaiki selama pending, beku setelah admin memprosesnya`() {
+        juaraDenganHadiah()
+        klaim(mapOf("phone" to "081200000000", "ewallet" to "salah ketik"))
+        klaim(mapOf("phone" to "081211111111", "ewallet" to "DANA benar"))
+
+        val row = jdbc.sql("SELECT count(*) AS n, max(id) AS id FROM prize_claim").query().singleRow()
+        assertEquals(1L, row["n"], "perbaikan = update baris yang sama, bukan klaim kedua")
+        assertEquals(
+            "081211111111",
+            pii.decrypt(
+                jdbc.sql("SELECT phone_enc FROM prize_claim WHERE id = ?").param(row["id"])
+                    .query(ByteArray::class.java).single(),
+            ),
+        )
+
+        jdbc.sql("UPDATE prize_claim SET status = 'paid'").update()
+        assertEquals(409, klaim(mapOf("phone" to "081299999999", "ewallet" to "curang")).status)
+    }
+
+    @Test
+    fun `pemenang yang digugurkan tak bisa mengklaim`() {
+        juaraDenganHadiah()
+        jdbc.sql("UPDATE winner SET status = 'disqualified', disqualify_reason = 'bot'").update()
+        assertEquals(409, klaim(mapOf("phone" to "081234567890", "ewallet" to "DANA")).status)
+    }
+
+    @Test
+    fun `inbox hanya menampilkan pesan sendiri dan menghitung yang belum dibaca`() {
+        val aku = pemain("pemain-1")
+        val lain = pemain("pemain-2")
+        pesan(aku, "pesan lama")
+        pesan(aku, "pesan baru")
+        pesan(lain, "bukan untukmu")
+
+        val r = inbox()
+        assertEquals(listOf("pesan baru", "pesan lama"), r.messages.map { it.body }, "terbaru dulu")
+        assertEquals(2, r.unread)
+
+        val id = r.messages.first().id
+        assertEquals(200, tandaiBaca(id).status)
+        assertEquals(1, inbox().unread)
+        assertEquals(200, tandaiBaca(id).status, "menandai ulang tetap 200 (idempoten)")
+    }
+
+    @Test
+    fun `pesan milik pemain lain dibalas 404`() {
+        val lain = pemain("pemain-2")
+        pemain("pemain-1")
+        val id = pesan(lain, "rahasia")
+        assertEquals(404, tandaiBaca(id.toString()).status)
     }
 
     @Test
