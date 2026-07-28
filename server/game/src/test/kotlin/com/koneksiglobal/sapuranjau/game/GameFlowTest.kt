@@ -34,7 +34,13 @@ class GameTestApp
 @SpringBootTest(
     webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
     // Tick periode dimatikan: rollover di latar tak boleh mengubah data di tengah test (T-026).
-    properties = ["sapuranjau.tournament.tick.enabled=false", "sapuranjau.tournament.tnc-version=v1"],
+    properties = [
+        "sapuranjau.tournament.tick.enabled=false", "sapuranjau.tournament.tnc-version=v1",
+        // Ambang "terlalu cepat" dinaikkan supaya sinyal T-027 PASTI berbunyi di sini: yang diuji
+        // modul ini adalah kabelnya (level ditutup → flag tertulis), bukan angka ambangnya
+        // (itu unit test `LevelAnomalyTest`). Tanpa ini, hasilnya bergantung kecepatan mesin.
+        "sapuranjau.audit.min-ms-per-move=100000",
+    ],
 )
 class GameFlowTest {
 
@@ -514,6 +520,24 @@ class GameFlowTest {
                 .param(s.runId.toLong()).query(Long::class.java).single(),
             "pemenang periode sudah ditentukan — agregatnya tak boleh bergerak lagi",
         )
+    }
+
+    // T-027: level ditutup → sinyal anomali tertulis ke audit_event, tanpa memblokir permainan.
+    @Test
+    fun `level yang selesai dengan kecepatan tak manusiawi ditandai di audit`() {
+        val s = startTerkunci()
+        val last = tuntaskanLevel(s)
+        assertEquals(LevelStatus.LEVEL_CLEARED, last.status, "flag tak boleh mengubah hasil permainan")
+
+        val row = jdbc.sql(
+            "SELECT actor_type, target, detail->>'signals' AS sinyal FROM audit_event " +
+                "WHERE event_type = 'level_anomaly'",
+        ).query().singleRow()
+        assertEquals("system", row["actor_type"], "flag = pengamatan server, pemainnya di actor_id")
+        assertEquals("run:${s.runId}", row["target"])
+        // Klien test menyapu papan lewat daftar sel non-bom → ikut memicu `perfect_path`; yang
+        // dikunci di sini cuma bahwa sinyalnya benar-benar sampai ke audit.
+        assertTrue((row["sinyal"] as String).contains("too_fast"), "sinyal: ${row["sinyal"]}")
     }
 
     private fun startRaw(uid: String): Resp = client.post().uri("/v1/tournament/level/start")

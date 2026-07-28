@@ -209,7 +209,8 @@ class CasualClaimTest {
         assertEquals(ClaimResult.GRANTED, r.result, "menandai, bukan memblokir (ADR-0023)")
 
         val row = jdbc.sql("SELECT actor_type, actor_id, event_type, detail FROM audit_event").query().singleRow()
-        assertEquals("player", row["actor_type"])
+        // Flag anomali = pengamatan server, bukan tindakan pemain (T-027); pemainnya di `actor_id`.
+        assertEquals("system", row["actor_type"])
         assertEquals("casual_claim_anomaly", row["event_type"])
         assertTrue(row["actor_id"] != null)
         assertTrue(row["detail"].toString().contains("too_fast"), "detail: ${row["detail"]}")

@@ -1,5 +1,6 @@
-// server/tournament — siklus periode, gerbang turnamen, leaderboard, pemenang (T-026;
-// ADR-0021/0025/0026/0027/0038/0039/0040). Dipanggil `game` sebelum pemain menyentuh papan.
+// server/audit — penulis `audit_event` bersama + sinyal anomali bot (T-027, ARCH §9/§10).
+// Modul DAUN: tak bergantung pada modul feature mana pun, supaya semuanya boleh memanggilnya.
+// Tanpa endpoint HTTP — pembacaan audit milik panel admin (T-040/T-042).
 plugins {
     id("sapuranjau.spring-library")
 }
@@ -9,10 +10,7 @@ plugins {
 extra["flyway.version"] = libs.versions.flyway.get()
 
 dependencies {
-    implementation(project(":server:api")) // VerifiedUser + ApiException/ErrorCode (ADR-0035)
-    implementation(project(":server:audit")) // penulis audit_event bersama (T-027)
-    implementation(project(":server:lives")) // sapuan nyawa lewat saat periode berganti (T-023)
-    implementation("org.springframework.boot:spring-boot-starter-web")
+    implementation("org.springframework.boot:spring-boot-starter-json") // ObjectMapper utk `detail` jsonb
     implementation("org.springframework.boot:spring-boot-starter-data-jdbc") // ADR-0020
 
     testImplementation("org.springframework.boot:spring-boot-starter-test")

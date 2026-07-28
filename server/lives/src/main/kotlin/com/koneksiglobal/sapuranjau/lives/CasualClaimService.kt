@@ -2,6 +2,8 @@ package com.koneksiglobal.sapuranjau.lives
 
 import com.koneksiglobal.sapuranjau.api.error.ApiException
 import com.koneksiglobal.sapuranjau.api.error.ErrorCode
+import com.koneksiglobal.sapuranjau.audit.Actor
+import com.koneksiglobal.sapuranjau.audit.AuditService
 import com.koneksiglobal.sapuranjau.engine.CellIndex
 import com.koneksiglobal.sapuranjau.engine.LevelConfig
 import com.koneksiglobal.sapuranjau.engine.MinesweeperEngine
@@ -11,7 +13,6 @@ import org.springframework.http.HttpStatus
 import org.springframework.jdbc.core.simple.JdbcClient
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
-import tools.jackson.databind.ObjectMapper // Jackson 3 — mapper default Spring Boot 4
 
 // Earn nyawa dari casual (T-024, ADR-0023): klaim online, server re-simulasi `(seed, moves)`.
 //
@@ -25,7 +26,7 @@ import tools.jackson.databind.ObjectMapper // Jackson 3 — mapper default Sprin
 class CasualClaimService(
     private val lives: LifeService,
     private val jdbc: JdbcClient,
-    private val json: ObjectMapper,
+    private val audit: AuditService, // T-027: satu penulis audit_event utk seluruh server
     // Kebijakan earn (ADR-0023) — default = angka ADR, tunable, pindah ke admin-config saat panel
     // ada (T-042), pola sama dengan `ms-per-par-move` (ADR-0036). **Lantai legal §9.5: jangan
     // turunkan cap tanpa pertimbangan hukum — 1/5/10 sudah dekat lantai.**
@@ -138,17 +139,17 @@ class CasualClaimService(
         }
         if (signals.isEmpty()) return
 
-        val detail = json.writeValueAsString(
+        // Actor SYSTEM (T-027): flag anomali adalah PENGAMATAN server, bukan tindakan pemain —
+        // `actor_type='player'` membuat barisnya terbaca "pemain melakukan casual_claim_anomaly"
+        // persis di dokumen yang dipakai menangani banding. Pemainnya tetap di `actor_id`.
+        audit.record(
+            Actor.SYSTEM, userId, "casual_claim_anomaly", "seed:${req.seed}",
             mapOf(
                 "signals" to signals, "moves" to v.scored, "par" to v.par,
                 "elapsedMs" to req.elapsedMs, "msPerMove" to msPerMove,
                 "grid" to "${req.gridWidth}x${req.gridHeight}", "mines" to req.mineCount,
             ),
         )
-        jdbc.sql(
-            "INSERT INTO audit_event (actor_type, actor_id, event_type, target, detail) " +
-                "VALUES ('player', ?, 'casual_claim_anomaly', ?, ?::jsonb)",
-        ).params(userId, "seed:${req.seed}", detail).update()
     }
 
     private fun respond(userId: Long, result: ClaimResult): CasualClaimResponse {

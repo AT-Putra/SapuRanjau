@@ -2,6 +2,8 @@ package com.koneksiglobal.sapuranjau.tournament
 
 import com.koneksiglobal.sapuranjau.api.error.ApiException
 import com.koneksiglobal.sapuranjau.api.error.ErrorCode
+import com.koneksiglobal.sapuranjau.audit.Actor
+import com.koneksiglobal.sapuranjau.audit.AuditService
 import com.koneksiglobal.sapuranjau.lives.LifeService
 import org.slf4j.LoggerFactory
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
@@ -13,7 +15,6 @@ import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
-import tools.jackson.databind.ObjectMapper // Jackson 3 — mapper default Spring Boot 4
 import java.time.Instant
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
@@ -25,7 +26,7 @@ class PeriodService(
     private val jdbc: JdbcClient,
     private val lives: LifeService,
     private val winners: WinnerService,
-    private val json: ObjectMapper,
+    private val audit: AuditService, // T-027
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -121,13 +122,10 @@ class PeriodService(
             jdbc.sql(
                 "INSERT INTO tournament_ban (user_id, reason, purchase_id, period_start_id) VALUES (?, ?, ?, ?)",
             ).params(userId, reason, purchaseId, activeId).update()
-            jdbc.sql(
-                "INSERT INTO audit_event (actor_type, actor_id, event_type, target, detail) " +
-                    "VALUES ('system', ?, 'tournament_ban_issued', ?, ?::jsonb)",
-            ).params(
-                userId, "purchase:$purchaseId",
-                json.writeValueAsString(mapOf("reason" to reason, "periodStartId" to activeId, "deferred" to true)),
-            ).update()
+            audit.record(
+                Actor.SYSTEM, userId, "tournament_ban_issued", "purchase:$purchaseId",
+                mapOf("reason" to reason, "periodStartId" to activeId, "deferred" to true),
+            )
             log.warn("Ban tertunda purchase $purchaseId diterbitkan mulai periode $activeId")
         }
     }

@@ -12,6 +12,7 @@ dependencies {
     implementation(project(":shared:engine-core"))
     implementation(project(":shared:scoring"))
     implementation(project(":server:api")) // VerifiedUser + ApiException/ErrorCode (ADR-0035)
+    implementation(project(":server:audit")) // penulis audit_event bersama (T-027)
     implementation(project(":server:lives")) // konsumsi nyawa FIFO-expiry (T-023, ADR-0008/0037)
     implementation(project(":server:tournament")) // gerbang periode/ban/consent (T-026, ADR-0040)
     implementation("org.springframework.boot:spring-boot-starter-web")

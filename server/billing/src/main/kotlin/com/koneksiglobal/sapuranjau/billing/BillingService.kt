@@ -2,13 +2,14 @@ package com.koneksiglobal.sapuranjau.billing
 
 import com.koneksiglobal.sapuranjau.api.error.ApiException
 import com.koneksiglobal.sapuranjau.api.error.ErrorCode
+import com.koneksiglobal.sapuranjau.audit.Actor
+import com.koneksiglobal.sapuranjau.audit.AuditService
 import com.koneksiglobal.sapuranjau.lives.LifeService
 import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus
 import org.springframework.jdbc.core.simple.JdbcClient
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
-import tools.jackson.databind.ObjectMapper // Jackson 3 — mapper default Spring Boot 4
 
 // Billing (T-025): verifikasi pembelian → grant PaidLife (ADR-0011/0022), dan penegakan void
 // (ADR-0025). Client TAK PERNAH menentukan berapa nyawa yang terbit — jumlahnya dibaca dari SKU
@@ -18,7 +19,7 @@ class BillingService(
     private val play: PlayPurchases,
     private val lives: LifeService,
     private val jdbc: JdbcClient,
-    private val json: ObjectMapper,
+    private val audit: AuditService, // T-027: satu penulis audit_event utk seluruh server
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -123,11 +124,8 @@ class BillingService(
     private fun periodId(status: String): Long? = jdbc.sql("SELECT id FROM period WHERE status = ? ORDER BY starts_at LIMIT 1")
         .param(status).query(Long::class.java).optional().orElse(null)
 
-    private fun audit(userId: Long, event: String, target: String, detail: Map<String, Any?>) {
-        jdbc.sql(
-            "INSERT INTO audit_event (actor_type, actor_id, event_type, target, detail) VALUES ('system', ?, ?, ?, ?::jsonb)",
-        ).params(userId, event, target, json.writeValueAsString(detail)).update()
-    }
+    private fun audit(userId: Long, event: String, target: String, detail: Map<String, Any?>) =
+        audit.record(Actor.SYSTEM, userId, event, target, detail)
 
     private fun bad(msg: String) = ApiException(HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION, msg)
 

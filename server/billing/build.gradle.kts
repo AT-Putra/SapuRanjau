@@ -11,6 +11,7 @@ extra["flyway.version"] = libs.versions.flyway.get()
 dependencies {
     implementation(project(":server:api"))   // VerifiedUser + ApiException/ErrorCode (ADR-0035)
     implementation(project(":server:lives")) // grant PaidLife + clawback (T-023)
+    implementation(project(":server:audit")) // penulis audit_event bersama (T-027)
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-data-jdbc") // ADR-0020
     // Play Developer API dipanggil sebagai REST biasa lewat RestClient yang sudah ada — yang tak

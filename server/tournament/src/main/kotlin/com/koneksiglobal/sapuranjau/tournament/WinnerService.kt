@@ -2,12 +2,13 @@ package com.koneksiglobal.sapuranjau.tournament
 
 import com.koneksiglobal.sapuranjau.api.error.ApiException
 import com.koneksiglobal.sapuranjau.api.error.ErrorCode
+import com.koneksiglobal.sapuranjau.audit.Actor
+import com.koneksiglobal.sapuranjau.audit.AuditService
 import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus
 import org.springframework.jdbc.core.simple.JdbcClient
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
-import tools.jackson.databind.ObjectMapper // Jackson 3 — mapper default Spring Boot 4
 
 // Penentuan pemenang periode (ADR-0021) + gugur-pemenang. Hadiahnya sendiri dibagikan MANUAL di luar
 // sistem (ADR-0021) — yang disimpan di sini cuma daftar final + jejaknya.
@@ -15,7 +16,7 @@ import tools.jackson.databind.ObjectMapper // Jackson 3 — mapper default Sprin
 // Tombol admin (gugurkan, kirim pesan) = T-042; di sini cuma operasi domainnya, supaya controller
 // admin nanti tinggal tipis dan aturan eligible-nya tak ditulis ulang di lapisan HTTP.
 @Service
-class WinnerService(private val jdbc: JdbcClient, private val json: ObjectMapper) {
+class WinnerService(private val jdbc: JdbcClient, private val audit: AuditService) {
 
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -106,13 +107,10 @@ class WinnerService(private val jdbc: JdbcClient, private val json: ObjectMapper
             .params(periodId, userId, rank).update()
     }
 
-    // ponytail: 4 baris kembar dengan `billing` — modul `audit` bersama baru berbayar di T-027, yang
-    // memang akan memiliki tabel ini beserta deteksi anomalinya.
-    private fun audit(event: String, target: String, detail: Map<String, Any?>) {
-        jdbc.sql(
-            "INSERT INTO audit_event (actor_type, event_type, target, detail) VALUES ('system', ?, ?, ?::jsonb)",
-        ).params(event, target, json.writeValueAsString(detail)).update()
-    }
+    // Gugur-pemenang & pemilihan pemenang = aksi server (T-042 nanti melengkapi identitas admin yang
+    // menekan tombolnya lewat actor `ADMIN`).
+    private fun audit(event: String, target: String, detail: Map<String, Any?>) =
+        audit.record(Actor.SYSTEM, null, event, target, detail)
 
     private class Winner(val periodId: Long, val userId: Long, val rank: Int, val status: String)
 }

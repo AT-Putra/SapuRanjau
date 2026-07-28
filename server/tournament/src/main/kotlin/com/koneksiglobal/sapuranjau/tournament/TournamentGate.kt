@@ -2,12 +2,13 @@ package com.koneksiglobal.sapuranjau.tournament
 
 import com.koneksiglobal.sapuranjau.api.error.ApiException
 import com.koneksiglobal.sapuranjau.api.error.ErrorCode
+import com.koneksiglobal.sapuranjau.audit.Actor
+import com.koneksiglobal.sapuranjau.audit.AuditService
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpStatus
 import org.springframework.jdbc.core.simple.JdbcClient
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
-import tools.jackson.databind.ObjectMapper // Jackson 3 — mapper default Spring Boot 4
 
 // Gerbang turnamen (T-026): satu tempat yang menjawab "boleh main tidak?" — periode terkunci
 // (ADR-0021), ban refund (ADR-0025), persetujuan S&K (ADR-0026).
@@ -17,7 +18,7 @@ import tools.jackson.databind.ObjectMapper // Jackson 3 — mapper default Sprin
 @Service
 class TournamentGate(
     private val jdbc: JdbcClient,
-    private val json: ObjectMapper,
+    private val audit: AuditService, // T-027
     // Versi S&K berjalan. Naskahnya hidup di legal pack + klien; server cuma menyimpan versi yang
     // disetujui (ADR-0026/0040). Ganti versi = ganti properti ini bersamaan dengan deploy naskahnya.
     @Value("\${sapuranjau.tournament.tnc-version:2026-07-01}") private val tncVersion: String,
@@ -81,10 +82,8 @@ class TournamentGate(
                 "ON CONFLICT (user_id, period_id) DO UPDATE SET tnc_version = EXCLUDED.tnc_version, agreed_at = now()",
         ).params(userId, periodId, version).update()
 
-        jdbc.sql(
-            "INSERT INTO audit_event (actor_type, actor_id, event_type, target, detail) " +
-                "VALUES ('player', ?, 'tournament_consent', ?, ?::jsonb)",
-        ).params(userId, "period:$periodId", json.writeValueAsString(mapOf("tncVersion" to version))).update()
+        // Actor PLAYER: ini benar-benar tindakan pemain (beda dari flag anomali yang diamati server).
+        audit.record(Actor.PLAYER, userId, "tournament_consent", "period:$periodId", mapOf("tncVersion" to version))
 
         return check(userId)
     }

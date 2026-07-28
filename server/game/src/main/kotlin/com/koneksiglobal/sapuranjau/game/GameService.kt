@@ -2,6 +2,8 @@ package com.koneksiglobal.sapuranjau.game
 
 import com.koneksiglobal.sapuranjau.api.error.ApiException
 import com.koneksiglobal.sapuranjau.api.error.ErrorCode
+import com.koneksiglobal.sapuranjau.audit.LevelAnomalyDetector
+import com.koneksiglobal.sapuranjau.audit.LevelFacts
 import com.koneksiglobal.sapuranjau.engine.Board
 import com.koneksiglobal.sapuranjau.engine.CellIndex
 import com.koneksiglobal.sapuranjau.engine.LevelConfig
@@ -39,6 +41,7 @@ class GameService(
     private val scores: LevelScoreRepo,
     private val lives: LifeService, // T-023: konsumsi FIFO-expiry; `game` → `lives`, tak sebaliknya
     private val gate: TournamentGate, // T-026: periode terkunci / ban / S&K (ADR-0021/0025/0026)
+    private val anomali: LevelAnomalyDetector, // T-027: flag bot saat level ditutup
     private val jdbc: JdbcClient,
     // parTimeMs = parMoves × konstanta (05 §2). Tunable (ADR-0017/0036); pindah ke admin-config saat kalibrasi.
     @Value("\${sapuranjau.scoring.ms-per-par-move:2000}") private val msPerParMove: Long,
@@ -322,6 +325,13 @@ class GameService(
                 "AND EXISTS (SELECT 1 FROM period WHERE id = ? AND status = 'ACTIVE')",
         ).params(next, score.toLong(), s.activeMs, s.scoredMoves, run.id, run.periodId).update()
         if (credited == 0) log.info("Run ${run.id}: level selesai tapi tak dikreditkan (terkunci / periode tak aktif)")
+
+        // Sinyal anomali bot (T-027) — dari angka yang sudah dihitung di atas, tanpa query tambahan
+        // di jalur selesai-level. MENANDAI, tak memblokir (ARCH §9, ADR-0037).
+        anomali.inspectLevel(
+            userId = run.userId, runId = run.id!!, levelIndex = cfg.levelIndex,
+            play = LevelFacts(s.scoredMoves, parMoves, s.activeMs, s.livesUsed, cfg.lifeCap),
+        )
 
         return score
     }
