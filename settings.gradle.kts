@@ -51,6 +51,7 @@ include(":client:ui-kit")
 include(":client:data")
 include(":client:feature-casual")
 include(":client:feature-tournament")
+include(":client:feature-wallet")
 //
 // Ditambah per-task saat diklaim (docs/04_TASKS.md) — tiap penambahan = 1 baris + 1 build.gradle.kts 3-baris:
 //   shared:  contracts

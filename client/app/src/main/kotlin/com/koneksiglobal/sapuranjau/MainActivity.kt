@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -18,10 +19,15 @@ import androidx.compose.ui.Modifier
 import com.koneksiglobal.sapuranjau.casual.CasualScreen
 import com.koneksiglobal.sapuranjau.tournament.TournamentScreen
 import com.koneksiglobal.sapuranjau.uikit.theme.SapuRanjauTheme
+import com.koneksiglobal.sapuranjau.wallet.WalletScreen
 
-private enum class Tujuan(val label: String) { CASUAL("Casual"), TURNAMEN("Turnamen") }
+private enum class Tujuan(val label: String, val ikon: String) {
+    CASUAL("Casual", "🎯"),
+    TURNAMEN("Turnamen", "🏆"),
+    NYAWA("Nyawa", "❤️"),
+}
 
-// Satu Activity, seluruh layar dirender Compose. **Tanpa library navigasi**: dua tujuan yang keduanya
+// Satu Activity, seluruh layar dirender Compose. **Tanpa library navigasi**: tiga tujuan yang semuanya
 // top-level tak punya back-stack untuk dikelola — satu state + NavigationBar sudah cukup. ViewModel
 // tiap layar hidup di ViewModelStore Activity, jadi berpindah tab TIDAK mereset papan casual
 // (janji "progres tersimpan" di dialog nyawa turnamen, ADR-0037).
@@ -44,17 +50,21 @@ private fun App() {
                     NavigationBarItem(
                         selected = tujuan == t,
                         onClick = { tujuan = t },
-                        icon = { Text(if (t == Tujuan.CASUAL) "🎯" else "🏆") },
+                        icon = { Text(t.ikon) },
                         label = { Text(t.label) },
                     )
                 }
             }
         },
     ) { padding ->
-        androidx.compose.foundation.layout.Box(modifier = Modifier.padding(padding)) {
+        Box(modifier = Modifier.padding(padding)) {
             when (tujuan) {
                 Tujuan.CASUAL -> CasualScreen()
-                Tujuan.TURNAMEN -> TournamentScreen(onMainCasual = { tujuan = Tujuan.CASUAL })
+                Tujuan.TURNAMEN -> TournamentScreen(
+                    onMainCasual = { tujuan = Tujuan.CASUAL },
+                    onBeliNyawa = { tujuan = Tujuan.NYAWA },
+                )
+                Tujuan.NYAWA -> WalletScreen(onMainCasual = { tujuan = Tujuan.CASUAL })
             }
         }
     }

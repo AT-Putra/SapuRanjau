@@ -41,6 +41,19 @@ class SapuRanjauApi(private val client: ApiClient) {
             ActionOutcome.serializer(),
         )
 
+    /**
+     * Setor `purchaseToken` dari Play → server verifikasi ke Google lalu menerbitkan nyawa.
+     * Klien TAK PERNAH menentukan jumlah nyawa: itu dibaca server dari tabel SKU (ADR-0022).
+     * Idempoten — token yang sama dikirim ulang membalas keadaan sekarang, bukan grant kedua.
+     */
+    suspend fun verifikasiPembelian(productId: String, purchaseToken: String): BillingResult =
+        client.post(
+            "/v1/billing/verify",
+            VerifyRequest(productId, purchaseToken),
+            VerifyRequest.serializer(),
+            BillingResult.serializer(),
+        )
+
     /** Pakai nyawa setelah kena bom — level lanjut DI TEMPAT (ADR-0037). Dompet kosong → 409. */
     suspend fun useLife(runId: String, levelIndex: Int): LifeUsed =
         client.post("/v1/tournament/life/use", UseLifeRequest(runId, levelIndex), UseLifeRequest.serializer(), LifeUsed.serializer())
@@ -100,6 +113,19 @@ data class CasualClaimResult(
 
 @Serializable
 private data class ConsentRequest(val tncVersion: String)
+
+@Serializable
+private data class VerifyRequest(val productId: String, val purchaseToken: String)
+
+enum class PurchaseStatus { PENDING, VERIFIED, GRANTED, VOIDED, UNKNOWN }
+
+@Serializable
+data class BillingResult(
+    val status: PurchaseStatus = PurchaseStatus.UNKNOWN,
+    val livesGranted: Int = 0,
+    val free: Int = 0,
+    val paid: Int = 0,
+)
 
 @Serializable
 data class Cell(val x: Int, val y: Int)

@@ -69,6 +69,22 @@ class ApiClientTest {
         assertEquals(3, hasil.free)
     }
 
+    // Pasangan (SKU, token) itulah yang mengikat pembelian di sisi Google — token `life_s` yang
+    // diklaim sebagai `life_l` dibalas 404. Jadi keduanya WAJIB ikut di body, dan jumlah nyawa
+    // dibaca dari balasan server, tak pernah dihitung klien (ADR-0011/0022).
+    @Test
+    fun `verifikasi pembelian mengirim SKU dan token, jumlah nyawa datang dari server`() = runBlocking {
+        body = """{"status":"GRANTED","livesGranted":5,"free":2,"paid":5}"""
+
+        val hasil = api().verifikasiPembelian("life_m", "dev-life_m-123")
+
+        assertTrue(requestBody.contains(""""productId":"life_m""""), requestBody)
+        assertTrue(requestBody.contains(""""purchaseToken":"dev-life_m-123""""), requestBody)
+        assertEquals(PurchaseStatus.GRANTED, hasil.status)
+        assertEquals(5, hasil.livesGranted)
+        assertEquals(5, hasil.paid)
+    }
+
     @Test
     fun `problem+json jadi ApiException dengan code yang dipakai memilih layar`() {
         status = 403

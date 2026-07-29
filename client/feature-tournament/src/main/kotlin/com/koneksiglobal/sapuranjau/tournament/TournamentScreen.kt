@@ -38,6 +38,7 @@ import com.koneksiglobal.sapuranjau.uikit.theme.Space
 @Composable
 fun TournamentScreen(
     onMainCasual: () -> Unit,
+    onBeliNyawa: () -> Unit,
     vm: TournamentViewModel = viewModel(),
 ) {
     val ui by vm.state.collectAsStateWithLifecycle()
@@ -72,7 +73,7 @@ fun TournamentScreen(
 
                 is TournamentUi.Gagal -> Pesan(s.pesan) { Button(onClick = vm::muat) { Text("Coba lagi") } }
 
-                is TournamentUi.Bermain -> Papan(s.level, vm, onMainCasual)
+                is TournamentUi.Bermain -> Papan(s.level, vm, onMainCasual, onBeliNyawa)
             }
         }
     }
@@ -93,7 +94,7 @@ private fun Pesan(teks: String, aksi: @Composable () -> Unit = {}) {
 // Extension ColumnScope: papan memakai `weight(1f)` supaya header tetap tersemat & papan yang
 // digeser tak mendorong apa pun keluar layar.
 @Composable
-private fun ColumnScope.Papan(level: LevelUi, vm: TournamentViewModel, onMainCasual: () -> Unit) {
+private fun ColumnScope.Papan(level: LevelUi, vm: TournamentViewModel, onMainCasual: () -> Unit, onBeliNyawa: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -127,7 +128,7 @@ private fun ColumnScope.Papan(level: LevelUi, vm: TournamentViewModel, onMainCas
             confirmButton = { Button(onClick = vm::lanjutLevel) { Text("Lanjut") } },
         )
 
-        level.awaitingLife -> DialogNyawa(level, vm, onMainCasual)
+        level.awaitingLife -> DialogNyawa(level, vm, onMainCasual, onBeliNyawa)
     }
 }
 
@@ -135,7 +136,7 @@ private fun ColumnScope.Papan(level: LevelUi, vm: TournamentViewModel, onMainCas
 // (1) skor level sudah 0 dan tak bisa naik, (2) jalur casual GRATIS berdampingan dengan tombol beli
 // (inilah yang menjaga §9.5 aturan 5: time-gated, bukan paywalled), (3) pengingat refund → ban.
 @Composable
-private fun DialogNyawa(level: LevelUi, vm: TournamentViewModel, onMainCasual: () -> Unit) {
+private fun DialogNyawa(level: LevelUi, vm: TournamentViewModel, onMainCasual: () -> Unit, onBeliNyawa: () -> Unit) {
     AlertDialog(
         onDismissRequest = {},
         title = { Text(if (level.dompetKosong) "Nyawa habis" else "Kena bom") },
@@ -162,9 +163,9 @@ private fun DialogNyawa(level: LevelUi, vm: TournamentViewModel, onMainCasual: (
         },
         confirmButton = {
             if (level.dompetKosong) {
-                // T-033 yang menyambungkan Play Billing; tombolnya sudah ada di sini karena dialog
-                // inilah titik belinya (ADR-0037), dan menyembunyikannya akan mengubah isi dialog.
-                TextButton(onClick = {}, enabled = false) { Text("Beli nyawa (menyusul)") }
+                // Dialog inilah titik beli yang dimaksud ADR-0037 — ia membuka dompet, tempat jalur
+                // gratis dan paket berbayar berdiri berdampingan (T-033).
+                Button(onClick = onBeliNyawa) { Text("Beli nyawa") }
             } else {
                 Button(onClick = vm::pakaiNyawa) { Text("Pakai 1 nyawa") }
             }
