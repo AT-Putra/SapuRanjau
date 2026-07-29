@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- HANYA varian debug: server dev jalan di `http://10.0.2.2:8080` tanpa TLS, dan Android
+         memblokir cleartext sejak API 28. Varian rilis tak pernah memuat file ini → produksi tetap
+         HTTPS-only. -->
+    <application
+        android:usesCleartextTraffic="true"
+        tools:targetApi="28" />
+</manifest>

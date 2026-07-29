@@ -14,6 +14,7 @@ android {
 dependencies {
     implementation(project(":client:ui-kit"))
     implementation(project(":client:feature-casual"))
+    implementation(project(":client:feature-tournament"))
 
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.material3)

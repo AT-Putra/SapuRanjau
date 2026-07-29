@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Casual jalan sepenuhnya offline (ADR-0030) → belum ada izin INTERNET di fase ini.
-         Ditambahkan saat `client/data` menyentuh server (T-035). -->
+    <!-- Turnamen server-authoritative (T-032) → izin INTERNET dipasang di sini, tempat APK dirakit.
+         Casual sendiri tetap offline penuh (ADR-0030). -->
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <application
         android:label="Sapu Ranjau"

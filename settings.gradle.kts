@@ -18,6 +18,19 @@ dependencyResolutionManagement {
 
 rootProject.name = "sapuranjau"
 
+// Repo ini hidup di dalam folder OneDrive: OneDrive menyinkronkan `build/` sambil Gradle menulis ke
+// sana, dan hasilnya kegagalan acak "Unable to delete directory … a process has files open".
+// Obatnya = keluarkan output build dari pohon yang disinkronkan, TANPA memindahkan repo.
+//
+// Opt-in per mesin (default tak berubah): set `sapuranjau.buildDir` di `~/.gradle/gradle.properties`,
+// mis. `sapuranjau.buildDir=C:\\Users\\<user>\\AppData\\Local\\sapuranjau-build`.
+providers.gradleProperty("sapuranjau.buildDir").orNull?.let { root ->
+    gradle.beforeProject {
+        val nama = path.trim(':').replace(':', '-').ifEmpty { "root" }
+        layout.buildDirectory.set(File(root, nama))
+    }
+}
+
 // ── Peta modul: daftar include INI = struktur repo (satu sumber kebenaran) ──
 // shared/ — Kotlin murni, dipakai client + server (ADR-0003, ARCH §3)
 include(":shared:engine-core")
@@ -37,6 +50,7 @@ include(":client:app")
 include(":client:ui-kit")
 include(":client:data")
 include(":client:feature-casual")
+include(":client:feature-tournament")
 //
 // Ditambah per-task saat diklaim (docs/04_TASKS.md) — tiap penambahan = 1 baris + 1 build.gradle.kts 3-baris:
 //   shared:  contracts

@@ -17,3 +17,18 @@ interface TokenProvider {
 class DevTokenProvider(private val uid: String) : TokenProvider {
     override suspend fun idToken(): String = "dev:$uid"
 }
+
+// Token Play Integrity (ADR-0041, kewajiban klien T-032/T-033). Dipisah dari [TokenProvider]: yang
+// satu identitas pemain, yang satu bukti perangkat — server pun memisahkannya (auth vs `/v1/integrity`).
+interface IntegrityTokenProvider {
+    /** `requestHash` mengikat token ke aksi tertentu; server belum memeriksanya (utang ADR-0041). */
+    suspend fun token(requestHash: String): String?
+}
+
+// Stub DEV — pasangan `StubIntegrityVerifier` di server (token apa pun yang tak kosong lulus).
+// Play Integrity yang sungguhan menuntut Google Play Services + APK terdaftar, jadi ia TAK BISA
+// dijalankan di emulator: ADR-0041 justru menolak `MEETS_VIRTUAL_INTEGRITY`. Implementasi nyata
+// dipasang bersama pengujian di HP fisik (RELEASE §3).
+class DevIntegrityTokenProvider : IntegrityTokenProvider {
+    override suspend fun token(requestHash: String): String = "dev-integrity:$requestHash"
+}
