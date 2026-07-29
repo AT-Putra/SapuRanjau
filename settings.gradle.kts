@@ -35,9 +35,11 @@ include(":server:integrity")
 // client/ — Android + Compose (ADR-0001), fase client dibuka ADR-0042 (palet/token)
 include(":client:app")
 include(":client:ui-kit")
+include(":client:data")
 include(":client:feature-casual")
 //
 // Ditambah per-task saat diklaim (docs/04_TASKS.md) — tiap penambahan = 1 baris + 1 build.gradle.kts 3-baris:
 //   shared:  contracts
 //   server:  api (T-021), game, lives, billing, tournament, audit, admin
 //   client:  app, ui-kit, data, feature-casual / -tournament / -wallet / -leaderboard  (fase client)
+//   (data ditambah T-035)

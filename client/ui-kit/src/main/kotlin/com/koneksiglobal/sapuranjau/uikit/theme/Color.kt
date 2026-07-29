@@ -9,8 +9,13 @@ import androidx.compose.ui.graphics.Color
 // berhadiah harus tampil sama di semua perangkat, dan tiap wallpaper adalah pasangan kontras yang
 // tak pernah kita uji.
 //
-// Peran M3 yang tak disebut di sini memakai default Material 3. Yang di-override hanya yang
-// benar-benar membawa identitas; sisanya biar M3 yang menjaga konsistensinya.
+// SEMUA peran diisi, tak ada yang dibiarkan default. Kesalahan sebelumnya: "sisanya biar M3 yang
+// menjaga" — default M3 adalah palet BASELINE UNGU, bukan turunan seed kita. Akibatnya nyata dan
+// terlihat di emulator: chip terpilih (`secondaryContainer`) tampil lavender di tengah UI teal.
+// Peran yang belum pernah dipakai satu komponen pun tetap diisi di sini, karena komponen berikutnya
+// (dialog, kartu, text field di T-032/033/034) memanggilnya tanpa bertanya.
+//
+// Nilai = tangga tonal M3 dari seed (T10/T20/T30/T40/T80/T90/T95): mekanis, bukan selera.
 
 private val Seed = Color(0xFF0F766E)
 
@@ -19,12 +24,38 @@ internal val LightScheme = lightColorScheme(
     onPrimary = Color.White,
     primaryContainer = Color(0xFFA7E8DF),
     onPrimaryContainer = Color(0xFF00201C),
+    inversePrimary = Color(0xFF6FD9CC),
     secondary = Color(0xFF4A635F),
+    onSecondary = Color.White,
+    secondaryContainer = Color(0xFFCCE8E3),
+    onSecondaryContainer = Color(0xFF05201C),
+    tertiary = Color(0xFF46617A),
+    onTertiary = Color.White,
+    tertiaryContainer = Color(0xFFCCE5FF),
+    onTertiaryContainer = Color(0xFF001E31),
     background = Color(0xFFF4FBF9),
     onBackground = Color(0xFF161D1C),
     surface = Color(0xFFF4FBF9),
     onSurface = Color(0xFF161D1C),
+    surfaceVariant = Color(0xFFDAE5E2),
+    onSurfaceVariant = Color(0xFF3F4947),
+    surfaceTint = Seed,
+    inverseSurface = Color(0xFF2B3231),
+    inverseOnSurface = Color(0xFFECF2F0),
+    surfaceDim = Color(0xFFD5DBD9),
+    surfaceBright = Color(0xFFF4FBF9),
+    surfaceContainerLowest = Color.White,
+    surfaceContainerLow = Color(0xFFEFF5F3),
+    surfaceContainer = Color(0xFFE9F0EE),
+    surfaceContainerHigh = Color(0xFFE3EAE8),
+    surfaceContainerHighest = Color(0xFFDEE4E2),
+    outline = Color(0xFF6F7977),
+    outlineVariant = Color(0xFFBEC9C6),
     error = Color(0xFFB3261E),
+    onError = Color.White,
+    errorContainer = Color(0xFFF9DEDC),
+    onErrorContainer = Color(0xFF410E0B),
+    scrim = Color.Black,
 )
 
 internal val DarkScheme = darkColorScheme(
@@ -32,12 +63,38 @@ internal val DarkScheme = darkColorScheme(
     onPrimary = Color(0xFF00382F),
     primaryContainer = Color(0xFF005046),
     onPrimaryContainer = Color(0xFFA7E8DF),
+    inversePrimary = Seed,
     secondary = Color(0xFFB1CCC7),
+    onSecondary = Color(0xFF1C3531),
+    secondaryContainer = Color(0xFF334B47),
+    onSecondaryContainer = Color(0xFFCCE8E3),
+    tertiary = Color(0xFFADCAE6),
+    onTertiary = Color(0xFF153349),
+    tertiaryContainer = Color(0xFF2D4A61),
+    onTertiaryContainer = Color(0xFFCCE5FF),
     background = Color(0xFF0E1514),
     onBackground = Color(0xFFDDE4E2),
     surface = Color(0xFF0E1514),
     onSurface = Color(0xFFDDE4E2),
+    surfaceVariant = Color(0xFF3F4947),
+    onSurfaceVariant = Color(0xFFBEC9C6),
+    surfaceTint = Color(0xFF6FD9CC),
+    inverseSurface = Color(0xFFDDE4E2),
+    inverseOnSurface = Color(0xFF2B3231),
+    surfaceDim = Color(0xFF0E1514),
+    surfaceBright = Color(0xFF343B3A),
+    surfaceContainerLowest = Color(0xFF090F0E),
+    surfaceContainerLow = Color(0xFF161D1C),
+    surfaceContainer = Color(0xFF1A2220),
+    surfaceContainerHigh = Color(0xFF252C2B),
+    surfaceContainerHighest = Color(0xFF303736),
+    outline = Color(0xFF899391),
+    outlineVariant = Color(0xFF3F4947),
     error = Color(0xFFFFB4AB),
+    onError = Color(0xFF601410),
+    errorContainer = Color(0xFF8C1D18),
+    onErrorContainer = Color(0xFFF9DEDC),
+    scrim = Color.Black,
 )
 
 // Warna khusus papan — bukan peran Material, jadi hidup di token sendiri (03 §2).

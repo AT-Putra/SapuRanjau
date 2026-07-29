@@ -1,6 +1,8 @@
 package com.koneksiglobal.sapuranjau.casual
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -8,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -24,6 +27,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.koneksiglobal.sapuranjau.engine.CellIndex
 import com.koneksiglobal.sapuranjau.uikit.CellState
 import com.koneksiglobal.sapuranjau.uikit.MineGrid
+import com.koneksiglobal.sapuranjau.uikit.cellSizeFor
 import com.koneksiglobal.sapuranjau.uikit.theme.SapuRanjauTheme
 import com.koneksiglobal.sapuranjau.uikit.theme.Space
 
@@ -64,17 +68,28 @@ fun CasualScreen(vm: CasualViewModel = viewModel()) {
                 Button(onClick = vm::ulang) { Text("Ulang") }
             }
 
-            // Papan sulit (16×30) lebih lebar dari layar potret → digeser, bukan diperkecil sampai
-            // tak bisa disentuh (03 §5, target sentuh).
-            Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                MineGrid(
-                    width = state.config.gridWidth,
-                    height = state.config.gridHeight,
-                    cellAt = { x, y -> state.cellAt(x, y) },
-                    onTap = { x, y -> vm.tap(CellIndex(x, y)) },
-                    onLongPress = { x, y -> vm.tahan(CellIndex(x, y)) },
-                    enabled = state.bolehDisentuh,
-                )
+            // Papan sulit (16×30) lebih lebar DAN lebih tinggi dari layar potret → digeser dua arah,
+            // bukan diperkecil sampai tak bisa disentuh (03 §5, target sentuh).
+            //
+            // Ukuran sel dihitung di sini, DI LUAR modifier scroll: di dalam scroll lebar yang
+            // tersedia tak terhingga, dan papan 9×9 pun ikut terpotong (bug yang ketahuan di emulator).
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                val cellSize = cellSizeFor(maxWidth, state.config.gridWidth)
+                Box(
+                    modifier = Modifier
+                        .horizontalScroll(rememberScrollState())
+                        .verticalScroll(rememberScrollState()),
+                ) {
+                    MineGrid(
+                        width = state.config.gridWidth,
+                        height = state.config.gridHeight,
+                        cellSize = cellSize,
+                        cellAt = { x, y -> state.cellAt(x, y) },
+                        onTap = { x, y -> vm.tap(CellIndex(x, y)) },
+                        onLongPress = { x, y -> vm.tahan(CellIndex(x, y)) },
+                        enabled = state.bolehDisentuh,
+                    )
+                }
             }
         }
     }

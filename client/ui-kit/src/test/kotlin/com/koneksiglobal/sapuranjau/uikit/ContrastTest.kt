@@ -1,9 +1,12 @@
 package com.koneksiglobal.sapuranjau.uikit
 
+import androidx.compose.material3.ColorScheme
 import androidx.compose.ui.graphics.Color
 import com.koneksiglobal.sapuranjau.uikit.theme.DarkGameColors
+import com.koneksiglobal.sapuranjau.uikit.theme.DarkScheme
 import com.koneksiglobal.sapuranjau.uikit.theme.GameColors
 import com.koneksiglobal.sapuranjau.uikit.theme.LightGameColors
+import com.koneksiglobal.sapuranjau.uikit.theme.LightScheme
 import org.junit.jupiter.api.Test
 import kotlin.math.pow
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -30,6 +33,34 @@ class ContrastTest {
             assertTrue(r >= AA) { "$nama rasio %.2f < $AA".format(r) }
         }
     }
+
+    // Peran Material dipakai komponen yang belum ditulis (dialog, kartu, text field T-032/033/034),
+    // jadi pasangannya dijaga di sini — bukan menunggu ketahuan lewat screenshot seperti chip ungu.
+    @Test
+    fun `pasangan teks-latar Material memenuhi WCAG AA di kedua tema`() {
+        listOf(LightScheme to "terang", DarkScheme to "gelap").forEach { (scheme, tema) ->
+            textPairs(scheme).forEach { (peran, pair) ->
+                val r = contrast(pair.first, pair.second)
+                assertTrue(r >= AA) { "$peran tema $tema: rasio %.2f < $AA".format(r) }
+            }
+        }
+    }
+
+    private fun textPairs(s: ColorScheme) = listOf(
+        "onPrimary/primary" to (s.onPrimary to s.primary),
+        "onPrimaryContainer/primaryContainer" to (s.onPrimaryContainer to s.primaryContainer),
+        "onSecondary/secondary" to (s.onSecondary to s.secondary),
+        "onSecondaryContainer/secondaryContainer" to (s.onSecondaryContainer to s.secondaryContainer),
+        "onTertiary/tertiary" to (s.onTertiary to s.tertiary),
+        "onTertiaryContainer/tertiaryContainer" to (s.onTertiaryContainer to s.tertiaryContainer),
+        "onBackground/background" to (s.onBackground to s.background),
+        "onSurface/surface" to (s.onSurface to s.surface),
+        "onSurfaceVariant/surfaceVariant" to (s.onSurfaceVariant to s.surfaceVariant),
+        "onSurface/surfaceContainer" to (s.onSurface to s.surfaceContainer),
+        "onError/error" to (s.onError to s.error),
+        "onErrorContainer/errorContainer" to (s.onErrorContainer to s.errorContainer),
+        "inverseOnSurface/inverseSurface" to (s.inverseOnSurface to s.inverseSurface),
+    )
 
     private fun assertAllReadable(colors: GameColors, tema: String) {
         (1..8).forEach { n ->

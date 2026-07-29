@@ -23,6 +23,10 @@ androidxActivity = "1.13.0"
 androidxLifecycle = "2.11.0"
 # Modul Android tak mewarisi JUnit dari starter Spring → dipin sendiri (stabil terakhir 2026-07-28).
 junitJupiter = "6.1.2"
+# ── client/data (T-035) — dicek maven central 2026-07-29, stabil terakhir ────────────────────────
+okhttp = "5.4.0"
+kotlinxSerialization = "1.11.0"
+kotlinxCoroutines = "1.11.0"
 
 [libraries]
 # Artefak plugin utk convention plugins (dipakai di build-logic/, bukan modul biasa).
@@ -52,5 +56,13 @@ androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidx
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidxActivity" }
 androidx-lifecycle-viewmodel-compose = { module = "androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "androidxLifecycle" }
 androidx-lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "androidxLifecycle" }
+okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
+kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinxCoroutines" }
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junitJupiter" }
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher", version.ref = "junitJupiter" }
+
+# Plugin yang dipakai LANGSUNG oleh build script modul (bukan lewat convention plugin): plugin di
+# classpath build-logic hanya terlihat oleh convention plugin, jadi yang ini butuh alias katalog.
+[plugins]
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
