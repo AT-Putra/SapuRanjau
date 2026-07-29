@@ -1,5 +1,6 @@
 package com.koneksiglobal.sapuranjau.tournament
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,8 +20,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.activity.compose.LocalActivity
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import android.view.WindowManager
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
@@ -42,6 +49,9 @@ fun TournamentScreen(
     vm: TournamentViewModel = viewModel(),
 ) {
     val ui by vm.state.collectAsStateWithLifecycle()
+
+    LayarTurnamenAman()
+    AutoPause(vm)
 
     Scaffold { padding ->
         Column(
@@ -117,6 +127,22 @@ private fun ColumnScope.Papan(level: LevelUi, vm: TournamentViewModel, onMainCas
                 onLongPress = vm::tahan,
                 enabled = level.bolehDisentuh,
             )
+        }
+
+        // Papan DITUTUP saat dijeda (ADR-0028). Sengaja tirai pekat, bukan `Modifier.blur`: blur
+        // adalah no-op di bawah API 31 sedangkan minSdk kita 26 (ADR-0014) — "blur yang diam-diam
+        // tak jalan" persis eksploit yang mau ditutup (pause untuk memandangi papan sambil berpikir).
+        if (level.dijeda) {
+            Box(
+                modifier = Modifier.matchParentSize().background(MaterialTheme.colorScheme.surface),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    if (level.hitungMundurMs > 0) "Lanjut dalam ${(level.hitungMundurMs + 999) / 1000}…" else "Dijeda — jam skor berhenti",
+                    style = MaterialTheme.typography.titleMedium,
+                    textAlign = TextAlign.Center,
+                )
+            }
         }
     }
 
@@ -207,5 +233,35 @@ private fun LevelUi.cellAt(x: Int, y: Int): CellState {
         at in revealed -> CellState.Revealed(revealed.getValue(at))
         at in flags -> CellState.Flagged
         else -> CellState.Hidden
+    }
+}
+
+// FLAG_SECURE hanya selama layar turnamen tampak (ADR-0028): memblokir screenshot & snapshot recents
+// supaya papan tak bisa "dibawa keluar" untuk dipelajari saat app di background. Dipasang & dilepas
+// lewat DisposableEffect — dipasang di Activity secara permanen akan ikut mengunci casual.
+@Composable
+private fun LayarTurnamenAman() {
+    val window = LocalActivity.current?.window ?: return
+    DisposableEffect(window) {
+        window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        onDispose { window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE) }
+    }
+}
+
+// Auto-pause = daur hidup, bukan tombol (ADR-0028). ON_STOP dipilih, bukan ON_PAUSE: dialog sistem
+// yang cuma menutupi sebagian layar tak boleh menghentikan permainan.
+@Composable
+private fun AutoPause(vm: TournamentViewModel) {
+    val owner = LocalLifecycleOwner.current
+    DisposableEffect(owner) {
+        val pengamat = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_STOP -> vm.keBackground()
+                Lifecycle.Event.ON_START -> vm.keDepan()
+                else -> Unit
+            }
+        }
+        owner.lifecycle.addObserver(pengamat)
+        onDispose { owner.lifecycle.removeObserver(pengamat) }
     }
 }

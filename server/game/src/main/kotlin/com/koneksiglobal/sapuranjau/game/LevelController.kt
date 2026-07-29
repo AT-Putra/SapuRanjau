@@ -23,6 +23,14 @@ class LevelController(private val game: GameService) {
     @PostMapping("/action")
     fun action(user: VerifiedUser, @RequestBody req: ActionRequest): ActionResponse = game.action(user.uid, req)
 
+    // POST /v1/tournament/level/pause · /resume (ADR-0028) — klien melapor saat app ke background /
+    // kembali ke depan. Tak ada pause manual: keduanya dipicu daur hidup, bukan tombol.
+    @PostMapping("/pause")
+    fun pause(user: VerifiedUser, @RequestBody req: PauseRequest): PauseResponse = game.pause(user.uid, req)
+
+    @PostMapping("/resume")
+    fun resume(user: VerifiedUser, @RequestBody req: PauseRequest): ResumeResponse = game.resume(user.uid, req)
+
     // GET /v1/tournament/level/{id}/reveal — ungkap seed (provably-fair, ARCH §6.5). `id` = boardId.
     @GetMapping("/{id}/reveal")
     fun reveal(user: VerifiedUser, @PathVariable id: String): RevealSeedResponse =
@@ -78,6 +86,15 @@ data class ActionResponse(
     val movesCount: Int, // langkah terskor (ADR-0018)
     val score: Int? = null, // terisi hanya saat LEVEL_CLEARED
 )
+
+// Pause & resume memakai alamat yang sama seperti aksi: (runId, levelIndex) — ADR-0028.
+data class PauseRequest(val runId: String, val levelIndex: Int)
+
+/** `pauseCount` dikembalikan supaya klien bisa menampilkannya kalau kelak perlu; tak ada penalti. */
+data class PauseResponse(val activeTimeMs: Long, val pauseCount: Int)
+
+/** Hitung-mundur sebelum papan muncul lagi (ADR-0028) — lamanya ditentukan server, bukan klien. */
+data class ResumeResponse(val countdownMs: Long)
 
 data class UseLifeRequest(val runId: String, val levelIndex: Int)
 

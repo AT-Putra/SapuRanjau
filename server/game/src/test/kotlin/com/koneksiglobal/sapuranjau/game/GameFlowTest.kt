@@ -57,6 +57,7 @@ class GameFlowTest {
             registry.add("spring.datasource.url") { postgres.jdbcUrl }
             registry.add("spring.datasource.username") { postgres.username }
             registry.add("spring.datasource.password") { postgres.password }
+            registry.add("sapuranjau.tournament.pause-audit-threshold") { 3 } // default 15 → 3 supaya test cepat
         }
     }
 
@@ -92,6 +93,48 @@ class GameFlowTest {
         // Gerbang S&K (ADR-0026, T-026) berlaku untuk SEMUA jalur turnamen: tanpa persetujuan,
         // `start` dibalas 403. Test alur permainan menyetujuinya di muka lewat endpoint sungguhan.
         listOf("pemain-1", "pemain-2").forEach { setujuiSK(it); attest(it) }
+    }
+
+    // Inti ADR-0028: jam skor BERHENTI saat app ke background. Tanpa pause, jeda itu menumpuk jadi
+    // waktu bermain (waktu aktif = jeda antar-aksi dalam satu sesi hidup, ADR-0036) dan menghukum
+    // pemain yang ditelepon di tengah level.
+    @Test
+    fun `jeda di background tak dihitung sebagai waktu bermain`() {
+        val s = startTerkunci()
+        val bom = minesOf(s.boardId)
+        val aman = allCells().first { it !in bom && it != first }
+        actOk(s.runId, MoveAction.REVEAL, first)
+
+        val dijeda = pause(s.runId)
+        Thread.sleep(800) // pemain "di background"
+        val lanjut = resume(s.runId)
+        // Aksi TEPAT setelah resume: hitung-mundur pun tak boleh masuk waktu bermain — papan baru
+        // muncul di klien setelah aba-aba selesai.
+        actOk(s.runId, MoveAction.REVEAL, aman)
+
+        val aktif = jdbc.sql("SELECT active_time_ms FROM board WHERE id = ?")
+            .param(s.boardId.toLong()).query(Long::class.java).single()
+        assertTrue(aktif < 500, "800 ms di background tak boleh masuk waktu aktif (terhitung $aktif ms)")
+        // Lantai-0: aksi yang tiba DI DALAM jendela hitung-mundur tak boleh mengurangi waktu — kalau
+        // bisa, pause-resume berulang jadi alat memangkas waktu, dan waktu masuk ke skor (ADR-0017).
+        assertTrue(aktif >= dijeda.activeTimeMs, "waktu bermain tak boleh menyusut (${dijeda.activeTimeMs} → $aktif)")
+        assertEquals(1, dijeda.pauseCount, "pause tercatat di papan")
+        assertTrue(lanjut.countdownMs > 0, "resume membawa hitung-mundur untuk klien")
+    }
+
+    // Pause berlebihan MENANDAI, tak menghukum (ADR-0028): tak ada penalti skor, cuma jejak audit.
+    @Test
+    fun `pause berulang menaikkan hitungan dan menandai audit di ambang`() {
+        val s = startTerkunci()
+        actOk(s.runId, MoveAction.REVEAL, first)
+        repeat(3) { pause(s.runId); resume(s.runId) }
+
+        val jejak = jdbc.sql("SELECT count(*) FROM audit_event WHERE event_type = 'pause_excessive'")
+            .query(Int::class.java).single()
+        assertEquals(1, jejak, "satu penanda saat ambang tercapai, bukan satu per pause")
+        val skorTerkunci = jdbc.sql("SELECT score_locked FROM run WHERE id = ?")
+            .param(s.runId.toLong()).query(Boolean::class.java).single()
+        assertTrue(!skorTerkunci, "pause tak pernah menghukum skor (ADR-0028)")
     }
 
     // ── Helper HTTP ──────────────────────────────────────────────────────────────────────────────
@@ -566,4 +609,14 @@ class GameFlowTest {
     private fun startRaw(uid: String): Resp = client.post().uri("/v1/tournament/level/start")
         .header("Authorization", "Bearer dev:$uid")
         .exchange { _, res -> Resp(res.statusCode.value(), res.bodyTo(String::class.java)) }
+
+    private fun pause(runId: String, level: Int = 0): PauseResponse =
+        client.post().uri("/v1/tournament/level/pause")
+            .header("Authorization", "Bearer dev:pemain-1")
+            .body(PauseRequest(runId, level)).retrieve().body(PauseResponse::class.java)!!
+
+    private fun resume(runId: String, level: Int = 0): ResumeResponse =
+        client.post().uri("/v1/tournament/level/resume")
+            .header("Authorization", "Bearer dev:pemain-1")
+            .body(PauseRequest(runId, level)).retrieve().body(ResumeResponse::class.java)!!
 }

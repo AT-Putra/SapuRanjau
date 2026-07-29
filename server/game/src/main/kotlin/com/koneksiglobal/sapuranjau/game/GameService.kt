@@ -2,6 +2,8 @@ package com.koneksiglobal.sapuranjau.game
 
 import com.koneksiglobal.sapuranjau.api.error.ApiException
 import com.koneksiglobal.sapuranjau.api.error.ErrorCode
+import com.koneksiglobal.sapuranjau.audit.Actor
+import com.koneksiglobal.sapuranjau.audit.AuditService
 import com.koneksiglobal.sapuranjau.audit.LevelAnomalyDetector
 import com.koneksiglobal.sapuranjau.audit.LevelFacts
 import com.koneksiglobal.sapuranjau.engine.Board
@@ -44,9 +46,14 @@ class GameService(
     private val gate: TournamentGate, // T-026: periode terkunci / ban / S&K (ADR-0021/0025/0026)
     private val anomali: LevelAnomalyDetector, // T-027: flag bot saat level ditutup
     private val integrity: IntegrityGate, // T-028: gerbang device Play Integrity (ADR-0041)
+    private val audit: AuditService, // T-036: sinyal pause berlebihan (ADR-0028)
     private val jdbc: JdbcClient,
     // parTimeMs = parMoves × konstanta (05 §2). Tunable (ADR-0017/0036); pindah ke admin-config saat kalibrasi.
     @Value("\${sapuranjau.scoring.ms-per-par-move:2000}") private val msPerParMove: Long,
+    // Ambang sinyal pause (ADR-0028 menyebut "berlebihan", angkanya milik implementor) & lama
+    // hitung-mundur resume. Keduanya tunable → admin-config saat T-042.
+    @Value("\${sapuranjau.tournament.pause-audit-threshold:15}") private val pauseAuditThreshold: Int,
+    @Value("\${sapuranjau.tournament.resume-countdown-ms:3000}") private val resumeCountdownMs: Long,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val engine = MinesweeperEngine()
@@ -135,7 +142,11 @@ class GameService(
             if (s.dead) throw ApiException(HttpStatus.CONFLICT, ErrorCode.CONFLICT, "Level menunggu pemakaian nyawa.")
 
             val now = System.currentTimeMillis()
-            s.activeMs += now - s.lastTick // waktu aktif = jeda antar-aksi dalam satu sesi (ADR-0036)
+            // `coerceAtLeast(0)`: `lastTick` bisa berada DI DEPAN `now` sesaat setelah resume (titik
+            // hitung dimajukan selama hitung-mundur). Tanpa lantai ini, aksi yang tiba di dalam
+            // jendela itu justru MENGURANGI waktu bermain — pause-resume berulang jadi alat memangkas
+            // waktu, dan waktu masuk ke skor (ADR-0017).
+            s.activeMs += (now - s.lastTick).coerceAtLeast(0) // waktu aktif = jeda antar-aksi (ADR-0036)
             s.lastTick = now
 
             val prevLogBytes = s.moves.size * 2
@@ -163,6 +174,54 @@ class GameService(
                 movesCount = s.scoredMoves,
                 score = score,
             )
+        }
+    }
+
+    // ── Endpoint: pause / resume (05 §3, ADR-0028) ───────────────────────────────────────────────
+    // Auto-pause saat app ke background — tanpa tombol manual, dan **tanpa penalti skor**: yang
+    // menetralkan eksploit "pause untuk berpikir" adalah papan yang di-blur di klien, bukan hukuman
+    // durasi (menghukum durasi melukai interupsi jujur: telepon masuk, baterai, turun kereta).
+    //
+    // Jam skor berhenti DI SINI: waktu aktif hanya menumpuk di antara aksi dalam satu sesi hidup
+    // (ADR-0036), jadi pause tinggal menutup jeda berjalan lalu menyetel ulang titik hitungnya.
+    @Transactional
+    fun pause(uid: String, req: PauseRequest): PauseResponse {
+        val (user, run, cfg, row) = locate(uid, req.runId, req.levelIndex)
+        return onBoard(row.id!!) {
+            val s = sessionOf(row, cfg)
+            val now = System.currentTimeMillis()
+            s.activeMs += (now - s.lastTick).coerceAtLeast(0) // lihat catatan lantai-0 di `action`
+            s.lastTick = now
+
+            val pauses = jdbc.sql(
+                "UPDATE board SET active_time_ms = ?, pause_count = pause_count + 1, updated_at = now() " +
+                    "WHERE id = ? RETURNING pause_count",
+            ).params(s.activeMs, s.boardId).query(Int::class.java).single()
+
+            // MENANDAI, tak memblokir — pola yang sama dengan sinyal anomali lain (T-027): ambangnya
+            // belum pernah bertemu pemain nyata, dan interupsi jujur juga menaikkan angka ini.
+            if (pauses == pauseAuditThreshold) {
+                audit.record(
+                    Actor.SYSTEM, user.id!!, "pause_excessive", run.id.toString(),
+                    mapOf("levelIndex" to cfg.levelIndex, "pauseCount" to pauses),
+                )
+            }
+            PauseResponse(activeTimeMs = s.activeMs, pauseCount = pauses)
+        }
+    }
+
+    // Resume tak menulis apa pun: cukup memindahkan titik hitung ke sekarang supaya jeda di
+    // background tak pernah jadi waktu bermain. `countdownMs` = hitung-mundur di klien sebelum papan
+    // muncul lagi, supaya pemain tak langsung disodori papan yang jamnya sudah jalan.
+    fun resume(uid: String, req: PauseRequest): ResumeResponse {
+        val (_, _, cfg, row) = locate(uid, req.runId, req.levelIndex)
+        return onBoard(row.id!!) {
+            // Titik hitung dimajukan SELAMA hitung-mundur: papan baru muncul setelah aba-aba selesai,
+            // jadi detik-detik itu bukan waktu bermain. Lamanya ditentukan server sendiri di baris
+            // berikutnya — jadi server memang tahu persis berapa yang harus dilewati, tanpa perlu
+            // percaya laporan klien.
+            sessionOf(row, cfg).lastTick = System.currentTimeMillis() + resumeCountdownMs
+            ResumeResponse(countdownMs = resumeCountdownMs)
         }
     }
 

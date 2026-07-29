@@ -17,7 +17,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
@@ -35,6 +39,15 @@ import com.koneksiglobal.sapuranjau.uikit.theme.Space
 @Composable
 fun CasualScreen(vm: CasualViewModel = viewModel()) {
     val state by vm.state.collectAsStateWithLifecycle()
+
+    // Auto-simpan saat app ke background (ADR-0028). Casual tak punya jam skor & tak di-blur —
+    // "pause"-nya memang cuma ini: papan berjalan tetap ada saat pemain kembali besok.
+    val owner = LocalLifecycleOwner.current
+    DisposableEffect(owner) {
+        val pengamat = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_STOP) vm.simpan() }
+        owner.lifecycle.addObserver(pengamat)
+        onDispose { owner.lifecycle.removeObserver(pengamat) }
+    }
 
     Scaffold { padding ->
         Column(

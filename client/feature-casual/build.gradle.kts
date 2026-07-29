@@ -3,6 +3,7 @@
 // Papan dihitung `engine-core` yang sama persis dengan yang dipakai server (ADR-0003).
 plugins {
     id("sapuranjau.android-library")
+    alias(libs.plugins.kotlin.serialization) // bentuk simpanan papan berjalan (T-036)
 }
 
 android {
@@ -17,6 +18,7 @@ dependencies {
     implementation(libs.compose.material3)
     implementation(libs.compose.ui)
     implementation(libs.compose.ui.tooling.preview)
+    implementation(libs.kotlinx.serialization.json)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose) // collectAsStateWithLifecycle
     debugImplementation(libs.compose.ui.tooling)

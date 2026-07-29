@@ -15,6 +15,7 @@ import com.koneksiglobal.sapuranjau.data.SapuRanjauApi
 import com.koneksiglobal.sapuranjau.data.TournamentAction
 import com.koneksiglobal.sapuranjau.data.TournamentStatusCode
 import com.koneksiglobal.sapuranjau.data.devApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -44,12 +45,15 @@ data class LevelUi(
     val status: LevelStatus = LevelStatus.CONTINUE,
     val score: Int? = null,
     val awaitingLife: Boolean = false,
+    /** Auto-pause ADR-0028: papan ditutup & jam skor beku di server. */
+    val dijeda: Boolean = false,
+    val hitungMundurMs: Long = 0,
     /** Hasil pemakaian nyawa TERAKHIR di level ini — sumber peringatan "skor sudah 0" (ADR-0037). */
     val nyawa: LifeUsed? = null,
     val dompetKosong: Boolean = false,
 ) {
     val sisaBom: Int get() = mineCount - flags.size
-    val bolehDisentuh: Boolean get() = status == LevelStatus.CONTINUE
+    val bolehDisentuh: Boolean get() = status == LevelStatus.CONTINUE && !dijeda
     /** Nyawa berikutnya tak akan menaikkan skor level ini lagi — syarat isi dialog ADR-0037. */
     val skorSudahNol: Boolean get() = nyawa != null && nyawa.livesUsed >= nyawa.lifeCap
 }
@@ -121,6 +125,31 @@ class TournamentViewModel(
     }
 
     fun tutupDialogDompet() = perbarui { it.copy(dompetKosong = false) }
+
+    // ── Auto-pause (ADR-0028) — dipicu daur hidup, TAK ADA tombol pause manual ───────────────────
+    // Papan ditutup lebih dulu, baru server dikabari: kalau jaringan lambat, yang tak boleh terjadi
+    // adalah papan tetap terlihat sementara pemain sudah keluar (eksploit "pause untuk berpikir").
+    fun keBackground() {
+        val level = bermain() ?: return
+        perbarui { it.copy(dijeda = true, hitungMundurMs = 0) }
+        jalankan { api.pauseLevel(level.runId, level.levelIndex) }
+    }
+
+    fun keDepan() {
+        val level = bermain() ?: return
+        if (!level.dijeda) return
+        jalankan {
+            val lanjut = api.resumeLevel(level.runId, level.levelIndex)
+            // Hitung-mundur milik server: klien tak boleh memutuskan sendiri kapan jam jalan lagi.
+            var sisa = lanjut.countdownMs
+            while (sisa > 0) {
+                perbarui { it.copy(hitungMundurMs = sisa) }
+                delay(minOf(sisa, 1000L))
+                sisa -= 1000L
+            }
+            perbarui { it.copy(dijeda = false, hitungMundurMs = 0) }
+        }
+    }
 
     /** Level berikutnya setelah level bersih (one-shot: tak ada ulang, ADR-0024). */
     fun lanjutLevel() = jalankan { _state.value = TournamentUi.Bermain(mulaiLevel().toUi()) }

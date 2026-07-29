@@ -78,6 +78,17 @@ class SapuRanjauApi(private val client: ApiClient) {
             BillingResult.serializer(),
         )
 
+    /**
+     * Lapor app ke background / kembali ke depan (ADR-0028). **Tak ada pause manual** — keduanya
+     * dipicu daur hidup. `pause` menghentikan jam skor; `resume` mengembalikan hitung-mundur yang
+     * lamanya ditentukan server.
+     */
+    suspend fun pauseLevel(runId: String, levelIndex: Int): Paused =
+        client.post("/v1/tournament/level/pause", PauseRequest(runId, levelIndex), PauseRequest.serializer(), Paused.serializer())
+
+    suspend fun resumeLevel(runId: String, levelIndex: Int): Resumed =
+        client.post("/v1/tournament/level/resume", PauseRequest(runId, levelIndex), PauseRequest.serializer(), Resumed.serializer())
+
     /** Pakai nyawa setelah kena bom — level lanjut DI TEMPAT (ADR-0037). Dompet kosong → 409. */
     suspend fun useLife(runId: String, levelIndex: Int): LifeUsed =
         client.post("/v1/tournament/life/use", UseLifeRequest(runId, levelIndex), UseLifeRequest.serializer(), LifeUsed.serializer())
@@ -241,6 +252,15 @@ data class ActionOutcome(
     val movesCount: Int = 0,
     val score: Int? = null, // hanya saat LEVEL_CLEARED
 )
+
+@Serializable
+private data class PauseRequest(val runId: String, val levelIndex: Int)
+
+@Serializable
+data class Paused(val activeTimeMs: Long = 0, val pauseCount: Int = 0)
+
+@Serializable
+data class Resumed(val countdownMs: Long = 0)
 
 @Serializable
 private data class UseLifeRequest(val runId: String, val levelIndex: Int)
