@@ -16,6 +16,7 @@ dependencies {
     implementation(project(":client:feature-casual"))
     implementation(project(":client:feature-tournament"))
     implementation(project(":client:feature-wallet"))
+    implementation(project(":client:feature-leaderboard"))
 
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.material3)

@@ -22,6 +22,30 @@ class SapuRanjauApi(private val client: ApiClient) {
     suspend fun claimCasual(claim: CasualClaim): CasualClaimResult =
         client.post("/v1/casual/claim", claim, CasualClaim.serializer(), CasualClaimResult.serializer())
 
+    /** Peringkat periode (tanpa `period` = periode berjalan). `size` dibatasi server ≤ 50. */
+    suspend fun leaderboard(page: Int = 0, size: Int = 20): Leaderboard =
+        client.get("/v1/leaderboard?page=$page&size=$size", Leaderboard.serializer())
+
+    /** Nama yang tampil di leaderboard & daftar pemenang (ADR-0039). 400 bila di luar 2–20 karakter. */
+    suspend fun ubahNamaTampilan(displayName: String): DisplayName =
+        client.put("/v1/profile/display-name", DisplayName(displayName), DisplayName.serializer(), DisplayName.serializer())
+
+    /** Inbox admin→pemain (ADR-0021). Satu-satunya kanal pemberitahuan selama push FCM belum ada. */
+    suspend fun pesan(page: Int = 0, size: Int = 20): Inbox =
+        client.get("/v1/messages?page=$page&size=$size", Inbox.serializer())
+
+    /** Idempoten; pesan milik pemain lain dibalas 404 — keberadaannya pun tak bocor. */
+    suspend fun tandaiDibaca(id: String): MessageRead =
+        client.post("/v1/messages/$id/read", MessageRead.serializer())
+
+    /**
+     * Form klaim hadiah pemenang — **PII** (ADR-0021/0030): no. HP wajib, plus minimal satu dari
+     * e-wallet/alamat. Boleh dikirim ulang untuk memperbaiki selama status `pending`.
+     * 409 = tak ada kemenangan yang bisa diklaim (atau sudah diproses admin).
+     */
+    suspend fun klaimHadiah(phone: String, ewallet: String?, address: String?): PrizeClaim =
+        client.post("/v1/prizes/claim", PrizeClaimRequest(phone, ewallet, address), PrizeClaimRequest.serializer(), PrizeClaim.serializer())
+
     /** Setujui S&K periode berjalan (ADR-0026). Versi ≠ versi server → 409, muat naskah baru dulu. */
     suspend fun consent(tncVersion: String): TournamentStatus =
         client.post("/v1/tournament/consent", ConsentRequest(tncVersion), ConsentRequest.serializer(), TournamentStatus.serializer())
@@ -116,6 +140,56 @@ private data class ConsentRequest(val tncVersion: String)
 
 @Serializable
 private data class VerifyRequest(val productId: String, val purchaseToken: String)
+
+// Tanpa id pemain: peringkat + nama sudah cukup dirender, dan id internal tak perlu bocor.
+// `me` (bukan `isMe`) menandai baris pemilik token — awalan `is` membuat bentuk wire tak simetris.
+@Serializable
+data class LeaderboardEntry(
+    val rank: Int = 0,
+    val name: String = "",
+    val totalScore: Long = 0,
+    val livesUsed: Int = 0,
+    val totalTimeMs: Long = 0,
+    val totalMoves: Int = 0,
+    val me: Boolean = false,
+)
+
+@Serializable
+data class Leaderboard(
+    val periodId: String = "",
+    val page: Int = 0,
+    val size: Int = 0,
+    val entries: List<LeaderboardEntry> = emptyList(),
+)
+
+@Serializable
+data class DisplayName(val displayName: String)
+
+@Serializable
+data class MessageItem(
+    val id: String = "",
+    val body: String = "",
+    val createdAt: String = "",
+    val readAt: String? = null,
+)
+
+@Serializable
+data class Inbox(
+    val page: Int = 0,
+    val size: Int = 0,
+    val unread: Int = 0,
+    val messages: List<MessageItem> = emptyList(),
+)
+
+@Serializable
+data class MessageRead(val id: String = "", val read: Boolean = false)
+
+@Serializable
+private data class PrizeClaimRequest(val phone: String, val ewallet: String? = null, val address: String? = null)
+
+// Balasan sengaja TAK memantulkan PII kembali: pemain melihat status, bukan salinan datanya.
+@Serializable
+data class PrizeClaim(val winnerId: String = "", val status: String = "")
 
 enum class PurchaseStatus { PENDING, VERIFIED, GRANTED, VOIDED, UNKNOWN }
 

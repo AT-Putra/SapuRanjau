@@ -17,6 +17,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.koneksiglobal.sapuranjau.casual.CasualScreen
+import com.koneksiglobal.sapuranjau.leaderboard.LeaderboardScreen
 import com.koneksiglobal.sapuranjau.tournament.TournamentScreen
 import com.koneksiglobal.sapuranjau.uikit.theme.SapuRanjauTheme
 import com.koneksiglobal.sapuranjau.wallet.WalletScreen
@@ -25,10 +26,11 @@ private enum class Tujuan(val label: String, val ikon: String) {
     CASUAL("Casual", "🎯"),
     TURNAMEN("Turnamen", "🏆"),
     NYAWA("Nyawa", "❤️"),
+    PERINGKAT("Peringkat", "📊"),
 }
 
-// Satu Activity, seluruh layar dirender Compose. **Tanpa library navigasi**: tiga tujuan yang semuanya
-// top-level tak punya back-stack untuk dikelola — satu state + NavigationBar sudah cukup. ViewModel
+// Satu Activity, seluruh layar dirender Compose. **Tanpa library navigasi**: semua tujuan bersifat
+// top-level dan tak punya back-stack untuk dikelola — satu state + NavigationBar sudah cukup. ViewModel
 // tiap layar hidup di ViewModelStore Activity, jadi berpindah tab TIDAK mereset papan casual
 // (janji "progres tersimpan" di dialog nyawa turnamen, ADR-0037).
 class MainActivity : ComponentActivity() {
@@ -65,6 +67,7 @@ private fun App() {
                     onBeliNyawa = { tujuan = Tujuan.NYAWA },
                 )
                 Tujuan.NYAWA -> WalletScreen(onMainCasual = { tujuan = Tujuan.CASUAL })
+                Tujuan.PERINGKAT -> LeaderboardScreen()
             }
         }
     }

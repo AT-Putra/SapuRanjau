@@ -53,6 +53,9 @@ class ApiClient(
     /** POST tanpa body — mis. `level/start`, yang levelnya ditentukan server sendiri (ADR-0024). */
     suspend fun <T> post(path: String, out: KSerializer<T>): T = send("POST", path, "", out)
 
+    suspend fun <B, T> put(path: String, body: B, into: KSerializer<B>, out: KSerializer<T>): T =
+        send("PUT", path, json.encodeToString(into, body), out)
+
     // ponytail: `execute()` blocking di Dispatchers.IO — cancel coroutine tak memutus socket, jadi
     // batas atasnya = timeout di bawah. Pindah ke `enqueue` + suspendCancellableCoroutine kalau
     // nanti ada layar yang benar-benar perlu membatalkan request di tengah jalan.
