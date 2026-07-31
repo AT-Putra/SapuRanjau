@@ -29,24 +29,31 @@ dependencies {
 // menolak plugin `com.github.node-gradle.node`: rilis terakhirnya 7.1.0 (Sep-2024) tak menyatakan
 // dukungan Gradle 9 sedangkan repo sudah di 9.6.1.
 val adminWeb = rootProject.layout.projectDirectory.dir("admin-web")
-val npm = if (System.getProperty("os.name").startsWith("Windows")) "npm.cmd" else "npm"
+val windows = System.getProperty("os.name").startsWith("Windows")
+val npm = if (windows) "npm.cmd" else "npm"
+val shell = if (windows) arrayOf("cmd", "/c") else arrayOf("sh", "-c")
 
 val adminWebInstall = tasks.register<Exec>("adminWebInstall") {
     description = "Pasang dependency admin-web dari lockfile (npm ci — BUKAN npm install: ADR-0013)."
     workingDir = adminWeb.asFile
-    commandLine(npm, "ci")
+    // `npm ci` dijalankan lewat shell dengan `|| ulangi sekali`. `npm ci` MENGHAPUS node_modules
+    // sebelum memasang ulang, dan di Windows penghapusan itu punya dua cara gagal yang berbeda —
+    // keduanya sudah kejadian di sini:
+    //   1. `ENOTEMPTY rmdir …` tepat setelah pemasangan baru = OneDrive masih memegang handle berkas
+    //      yang sedang disinkronkan (penyakit yang sama dengan `sapuranjau.buildDir`). Transien —
+    //      percobaan kedua lolos, dan itu yang dibeli baris ini.
+    //   2. `EPERM unlink …rolldown-binding…node` = ada **`npm run dev` yang masih hidup** memegang
+    //      binary native-nya. BUKAN transien: retry ikut gagal, dan memang seharusnya — obatnya
+    //      matikan dev server, bukan mencoba lagi. Jangan build sambil `vite dev` jalan.
+    commandLine(*shell, "npm ci || npm ci")
     inputs.files(adminWeb.file("package.json"), adminWeb.file("package-lock.json"))
     // Penanda murah yang ditulis npm sendiri. Mendaftarkan seluruh `node_modules` sebagai output
     // berarti Gradle mem-fingerprint puluhan ribu berkas tiap build — lebih mahal dari npm-nya.
     outputs.file(adminWeb.file("node_modules/.package-lock.json"))
-    // ponytail: repo ini hidup di dalam OneDrive, dan `npm ci` MENGHAPUS node_modules sebelum
-    // memasang ulang → sesekali `ENOTEMPTY: rmdir ...` karena OneDrive masih memegang handle berkas
-    // yang baru saja disinkronkan (penyakit yang sama dengan `sapuranjau.buildDir` di
-    // settings.gradle.kts). Obatnya: ulangi perintahnya (terbukti lolos di percobaan kedua) atau
-    // jeda sync sebentar. Retry otomatis SENGAJA tak dipasang: berkat inputs/outputs di atas, tugas
-    // ini hanya jalan saat lockfile berubah — beberapa baris kode build permanen untuk kejadian
-    // sesekali adalah pertukaran yang salah. Kalau kelak jadi sering, itu sinyal memindahkan
-    // node_modules keluar dari pohon yang disinkronkan.
+    // ponytail: retry satu kali di atas = tambalan, bukan obat. Obatnya memindahkan `node_modules`
+    // keluar dari pohon yang disinkronkan OneDrive (penyakit yang sama dengan `sapuranjau.buildDir`
+    // di settings.gradle.kts), tapi npm tak punya cara portabel untuk itu — junction pun dihapus
+    // `npm ci` sendiri. Bayar kalau retry mulai ikut gagal.
     doFirst {
         // ADR-0013: build tanpa Node harus GAGAL dengan pesan jelas, bukan diam-diam menerbitkan
         // server tanpa panel. Pesan bawaan Exec ("A problem occurred starting process") tak

@@ -9,10 +9,14 @@ import javax.crypto.spec.SecretKeySpec
 
 // TOTP RFC 6238 (HMAC-SHA1, 6 digit, langkah 30 detik) — 2FA wajib panel admin (ARCH §10, ADR-0013).
 //
-// Ditulis tangan, tanpa library TOTP + tanpa library QR: algoritmanya ~40 baris di atas `javax.crypto`
-// yang sudah ada di JDK, dan QR bisa dilewati karena Google Authenticator/Authy menerima secret
-// base32 yang diketik manual. Operator panel ini 1–3 orang, sekali enrol seumur akun — menambah dua
-// dependency (plus permukaan supply-chain-nya) untuk menghemat sekali ketik adalah pertukaran rugi.
+// Ditulis tangan, tanpa library TOTP: algoritmanya ~40 baris di atas `javax.crypto` yang sudah ada
+// di JDK. Yang dipakai authenticator adalah `otpauthUri()` di bawah.
+//
+// Catatan (T-041, 2026-07-31): QR-nya SEKARANG ADA, dirender di sisi panel (`admin-web`, uqr) dari
+// URI ini — server tetap tak punya dependency gambar. Alasan lama "cukup diketik manual" tak
+// bertahan: kunci base32 32 karakter diketik di HP adalah langkah yang gagal diam-diam (kode salah
+// terus tanpa memberi tahu salah ketiknya di mana), dan enrolment cuma terjadi sekali — kalau ia
+// gagal, akunnya terkunci. Kunci base32 tetap ditampilkan di bawah QR sebagai jalur cadangan.
 //
 // SHA1 di sini bukan kelalaian: RFC 6238 memakainya sebagai default dan itu satu-satunya algoritma
 // yang dijamin didukung semua aplikasi authenticator. Kekuatannya datang dari secret 160-bit + jendela
