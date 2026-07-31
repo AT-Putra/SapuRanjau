@@ -9,6 +9,7 @@ import { LevelCreate, LevelEdit, LevelList } from './levels';
 import { PrizeCreate, PrizeEdit, PrizeList } from './prizes';
 import { WinnerList } from './winners';
 import { AuditList, BanList, ConsentList } from './ops';
+import { PlayerReport, SalesReport } from './reports';
 
 const Beranda = () => (
   <Card sx={{ mt: 2 }}>
@@ -64,6 +65,11 @@ export const App = () => (
             create={setel ? PrizeCreate : undefined}
           />
           <Resource name="winners" options={{ label: 'Pemenang' }} list={WinnerList} />
+          {/* Laporan penjualan = laporan uang → hanya peran uang (server menegakkan hal yang sama). */}
+          {(permissions === 'admin' || permissions === 'finance') && (
+            <Resource name="sales" options={{ label: 'Laporan penjualan' }} list={SalesReport} />
+          )}
+          <Resource name="players" options={{ label: 'Laporan pemain' }} list={PlayerReport} />
           <Resource name="bans" options={{ label: 'Ban turnamen' }} list={BanList} />
           <Resource name="consents" options={{ label: 'Persetujuan S&K' }} list={ConsentList} />
           <Resource name="audit-events" options={{ label: 'Audit' }} list={AuditList} />

@@ -24,7 +24,10 @@ class RaQuery(private val json: ObjectMapper) {
         val arah: String get() = if (ascending) "ASC" else "DESC"
     }
 
-    fun page(range: String?): Page {
+    // `max` dinaikkan HANYA oleh layar laporan (T-042): ekspor CSV yang diam-diam terpotong di baris
+    // ke-200 adalah laporan yang salah, dan itu jenis kesalahan yang baru ketahuan di ruang rapat.
+    // Layar CRUD tetap memakai batas kecil — di sana 200 baris memang sudah lebih dari cukup.
+    fun page(range: String?, max: Int = MAX_LIMIT): Page {
         val nilai = range?.takeIf { it.isNotBlank() }?.let {
             runCatching { json.readValue(it, Array<Int>::class.java) }.getOrNull()
         } ?: return Page(0, DEFAULT_LIMIT)
@@ -33,7 +36,7 @@ class RaQuery(private val json: ObjectMapper) {
         val akhir = nilai[1]
         // Batas atas ditegakkan server: klien yang meminta `[0, 999999]` (atau salah hitung) tak boleh
         // bisa menarik seluruh tabel dalam satu query.
-        return Page(awal, (akhir - awal + 1).coerceIn(1, MAX_LIMIT))
+        return Page(awal, (akhir - awal + 1).coerceIn(1, max))
     }
 
     // Nilai non-teks (angka/boolean) ikut jadi teks — pemanggil yang mengubahnya ke tipe yang ia

@@ -424,6 +424,88 @@ class AdminDomainTest {
         assertEquals(false, json(tnc.body)["editable"])
     }
 
+    // ── Laporan ─────────────────────────────────────────────────────────────────────────────────
+
+    private fun beli(userId: Long, produk: String, lives: Int, status: String, hariLalu: Int) {
+        jdbc.sql(
+            "INSERT INTO purchase (user_id, product_id, purchase_token, lives_granted, status, created_at) " +
+                "VALUES (?, ?, ?, ?, ?, now() - make_interval(days => ?))",
+        ).params(userId, produk, "tok-${System.nanoTime()}", lives, status, hariLalu).update()
+    }
+
+    @Test
+    fun `laporan penjualan merekap per paket dan per hari, dan moderator tak boleh membukanya`() {
+        val kasir = sesi("kasir", AdminRole.FINANCE)
+        val moderator = sesi("mod", AdminRole.MODERATOR)
+        val u = pemain("uid-1", "Adita")
+        beli(u, "life_m", 5, "granted", 0)
+        beli(u, "life_m", 5, "granted", 0)
+        beli(u, "life_l", 10, "voided", 1)
+
+        // Laporan uang = peran uang (ARCH §10).
+        assertEquals(403, get("/admin/api/sales", moderator).status)
+
+        val daftar = get("/admin/api/sales", kasir)
+        assertEquals(200, daftar.status)
+        assertEquals(3, daftar(daftar.body).size)
+
+        val ringkas = get("/admin/api/sales/summary", kasir)
+        assertEquals(3, (json(ringkas.body)["transaksi"] as Number).toInt())
+        assertEquals(20, (json(ringkas.body)["livesGranted"] as Number).toInt())
+        assertEquals(1, (json(ringkas.body)["voided"] as Number).toInt())
+        // Rupiah TIDAK dilaporkan: `purchase.amount` tak pernah diisi (harga hidup di Play Console,
+        // ADR-0022). Layar wajib mengatakannya, bukan menampilkan nol yang terbaca "tak ada penjualan".
+        assertEquals(false, json(ringkas.body)["uangTersedia"])
+
+        // Deret harian = 2 hari berbeda (hari ini & kemarin), dikelompokkan di zona WIB.
+        @Suppress("UNCHECKED_CAST")
+        val harian = json(ringkas.body)["harian"] as List<Map<String, Any?>>
+        assertEquals(2, harian.size)
+
+        // Filter yang sama dipakai daftar DAN ringkasan — angka besar di atas tak boleh menjelaskan
+        // baris yang berbeda dari tabel di bawahnya.
+        val disaring = get("/admin/api/sales", kasir, mapOf("filter" to """{"productId":"life_m"}"""))
+        assertEquals(2, daftar(disaring.body).size)
+        val ringkasFilter = get("/admin/api/sales/summary", kasir, mapOf("filter" to """{"productId":"life_m"}"""))
+        assertEquals(2, (json(ringkasFilter.body)["transaksi"] as Number).toInt())
+    }
+
+    @Test
+    fun `laporan pemain merekap aktivitas tanpa membocorkan PII akun`() {
+        val cookie = sesi("bos")
+        val p = periode("P", 1, 5, "ACTIVE")
+        val u = jdbc.sql("INSERT INTO app_user (firebase_uid, display_name, email) VALUES (?, ?, ?) RETURNING id")
+            .params("uid-1", "Adita", "adita@contoh.test").query(Long::class.java).single()
+        val lain = pemain("uid-2", "Budi")
+        run(u, p, 700)
+        beli(u, "life_m", 5, "granted", 0)
+        jdbc.sql("INSERT INTO life_ledger (user_id, type, source) VALUES (?, 'free', 'earn_casual')").param(u).update()
+        jdbc.sql("INSERT INTO tournament_ban (user_id, reason, period_start_id) VALUES (?, 'refund', ?)").params(lain, p).update()
+
+        val semua = get("/admin/api/players", cookie)
+        assertEquals(200, semua.status)
+        assertEquals(2, daftar(semua.body).size)
+        // Email & no. HP TIDAK ikut: laporan ini dibuka semua peran, sedangkan PII punya pintunya
+        // sendiri (layar pemenang, peran finance, tiap bacaan ber-audit — ADR-0020).
+        assertFalse(semua.body!!.contains("adita@contoh.test"))
+
+        val adita = daftar(semua.body).first { it["displayName"] == "Adita" }
+        assertEquals(1, (adita["runs"] as Number).toInt())
+        assertEquals(700, (adita["bestScore"] as Number).toInt())
+        assertEquals(1, (adita["purchases"] as Number).toInt())
+        assertEquals(1, (adita["casualClaims"] as Number).toInt())
+        assertEquals(false, adita["activeBan"])
+        assertNotNull(adita["lastActivityAt"])
+
+        // Saring "sedang kena ban" — ban yang diampuni tak lagi terhitung (V22).
+        val kenaBan = get("/admin/api/players", cookie, mapOf("filter" to """{"banned":"true"}"""))
+        assertEquals(1, daftar(kenaBan.body).size)
+        assertEquals("Budi", daftar(kenaBan.body)[0]["displayName"])
+
+        val cari = get("/admin/api/players", cookie, mapOf("filter" to """{"q":"adit"}"""))
+        assertEquals(1, daftar(cari.body).size)
+    }
+
     // ── Reset 2FA ───────────────────────────────────────────────────────────────────────────────
 
     @Test
