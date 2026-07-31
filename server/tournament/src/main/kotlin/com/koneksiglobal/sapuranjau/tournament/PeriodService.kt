@@ -51,6 +51,31 @@ class PeriodService(
             .params(listOf(name, startsAt.utc(), endsAt.utc())).query(Long::class.java).single()
     }
 
+    // Ubah jadwal periode (T-042). Aturan yang sama dengan create() dan hidup di sini, bukan di
+    // controller admin: dua tempat yang memeriksa tumpang-tindih akan berbeda pendapat suatu hari.
+    // Periode yang sudah ENDED tak bisa diubah — mengubah tanggal sejarah membuat jarak ordinal ban
+    // & cooldown (PeriodWindows) berpindah di bawah kaki sanksi yang sudah berjalan.
+    @Transactional
+    fun update(id: Long, name: String?, startsAt: Instant, endsAt: Instant) {
+        if (!endsAt.isAfter(startsAt)) {
+            throw ApiException(HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION, "Periode berakhir sebelum mulai.")
+        }
+        val status = jdbc.sql("SELECT status FROM period WHERE id = ?").param(id)
+            .query(String::class.java).optional().orElse(null)
+            ?: throw ApiException(HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, "Periode $id tak ada.")
+        if (status == "ENDED") {
+            throw ApiException(HttpStatus.CONFLICT, ErrorCode.CONFLICT, "Periode yang sudah berakhir tak bisa diubah.")
+        }
+        val bentrok = jdbc.sql(
+            "SELECT 1 FROM period WHERE id <> ? AND status <> 'ENDED' AND starts_at < ? AND ends_at > ? LIMIT 1",
+        ).params(id, endsAt.utc(), startsAt.utc()).query(Int::class.java).optional().isPresent
+        if (bentrok) {
+            throw ApiException(HttpStatus.CONFLICT, ErrorCode.CONFLICT, "Rentang bertumpang-tindih dengan periode lain.")
+        }
+        jdbc.sql("UPDATE period SET name = ?, starts_at = ?, ends_at = ? WHERE id = ?")
+            .params(listOf(name, startsAt.utc(), endsAt.utc(), id)).update()
+    }
+
     // Tutup periode lebih awal: cukup majukan jam berakhirnya — sisanya (pemenang, papan yatim,
     // nyawa hangus) urusan `rollover()`, jadi jalur "berakhir normal" dan "ditutup admin" identik.
     @Transactional

@@ -63,6 +63,13 @@ class AdminUsers(private val jdbc: JdbcClient) {
         jdbc.sql("UPDATE admin_user SET totp_secret_enc = ? WHERE id = ?").params(listOf(secretEnc, id)).update()
     }
 
+    // Reset 2FA (T-042): secret dibuang → login berikutnya dipaksa enrol ulang (AdminAuthService).
+    // Satu-satunya pemulihan untuk operator yang kehilangan authenticator-nya; sebelum ini jalannya
+    // cuma SQL manual di server produksi.
+    fun clearTotpSecret(id: Long) {
+        jdbc.sql("UPDATE admin_user SET totp_secret_enc = NULL WHERE id = ?").param(id).update()
+    }
+
     fun touchLogin(id: Long) {
         jdbc.sql("UPDATE admin_user SET last_login_at = now() WHERE id = ?").param(id).update()
     }

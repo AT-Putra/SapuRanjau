@@ -17,7 +17,8 @@ internal fun banDistanceSql(userExpr: String, periodIdExpr: String) = """
        FROM tournament_ban b
        JOIN period ps ON ps.id = b.period_start_id
        JOIN period tp ON tp.id = $periodIdExpr
-      WHERE b.user_id = $userExpr AND ps.starts_at <= tp.starts_at)
+      WHERE b.user_id = $userExpr AND ps.starts_at <= tp.starts_at
+        AND b.forgiven_at IS NULL)
 """
 
 // Cooldown pemenang (ADR-0027): menang di P → tak eligible HADIAH di P+1..P+3 (jarak 1..3), eligible

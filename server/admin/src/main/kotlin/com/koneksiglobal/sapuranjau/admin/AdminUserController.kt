@@ -99,6 +99,24 @@ class AdminUserController(
         return dto(users.byId(id)!!)
     }
 
+    // Operator yang kehilangan authenticator-nya tak bisa login sama sekali (enrolTotp menolak akun
+    // yang sudah terdaftar) — sebelum T-042 pemulihannya cuma SQL di server produksi.
+    //
+    // Akun SENDIRI sengaja tak bisa direset: pemiliknya yang kehilangan authenticator toh tak punya
+    // sesi untuk menekan tombol ini, jadi satu-satunya yang terbantu adalah sesi curian yang ingin
+    // memindahkan 2FA ke perangkatnya sendiri. Reset selalu dilakukan operator lain.
+    @PostMapping("/{id}/reset-totp")
+    fun resetTotp(principal: AdminPrincipal, @PathVariable id: Long): AdminUserDto {
+        principal.require(AdminRole.ADMIN)
+        val target = users.byId(id) ?: tidakAda(id)
+        if (target.id == principal.id) {
+            throw ApiException(HttpStatus.CONFLICT, ErrorCode.CONFLICT, "Reset 2FA akun sendiri harus dilakukan operator lain.")
+        }
+        users.clearTotpSecret(id)
+        audit.record(Actor.ADMIN, principal.id, "admin_totp_reset", "admin:${target.username}")
+        return dto(users.byId(id)!!)
+    }
+
     private fun dto(u: AdminUser) = AdminUserDto(u.id.toString(), u.username, u.role.dbValue, u.disabledAt != null, u.totpEnrolled)
 
     private fun peran(nilai: String): AdminRole = runCatching { AdminRole.of(nilai.trim().lowercase()) }.getOrElse {

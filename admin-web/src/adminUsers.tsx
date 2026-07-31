@@ -12,6 +12,7 @@ import {
   TextInput,
   required,
 } from 'react-admin';
+import { AksiDialog } from './actions';
 
 // Resource `admin-users` (T-040 di server, layarnya di sini). Selain memang dipakai untuk mengelola
 // operator, ia bukti bahwa kontrak transport ADR-0013 jalan utuh dari browser: sesi cookie, header
@@ -42,6 +43,15 @@ export const AdminUserEdit = () => (
   <Edit redirect="list">
     <SimpleForm>
       <TextField source="username" label="Username" />
+      {/* Satu-satunya pemulihan untuk operator yang kehilangan authenticator-nya: login berikutnya
+          dipaksa mendaftar 2FA lagi. Akun sendiri ditolak server — yang kehilangan authenticator
+          tak punya sesi untuk menekannya, jadi tombol itu hanya berguna bagi sesi curian. */}
+      <AksiDialog
+        label="Reset 2FA"
+        judul="Reset 2FA operator ini?"
+        keterangan="Secret TOTP-nya dibuang. Login berikutnya akan menampilkan QR pendaftaran baru. Tercatat di audit."
+        path={(id) => `/admin-users/${id}/reset-totp`}
+      />
       <SelectInput source="role" label="Peran" choices={PERAN} validate={required()} />
       <BooleanInput source="disabled" label="Nonaktif" />
       {/* Dikosongkan = password tak diubah (server melewati nilai kosong). */}

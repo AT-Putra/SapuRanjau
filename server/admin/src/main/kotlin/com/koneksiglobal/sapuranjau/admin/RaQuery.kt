@@ -7,9 +7,10 @@ import tools.jackson.databind.ObjectMapper // Jackson 3 — mapper default Sprin
 // balasan `Content-Range: <resource> 0-24/319`. Dipakai SEMUA resource admin (T-042 menambah banyak)
 // supaya kontraknya ditulis sekali.
 //
-// `filter={}` sengaja belum diterjemahkan: tiap resource punya kolom filter berbeda, dan menebaknya
-// sekarang berarti menulis mesin filter untuk layar yang belum ada. Resource yang butuh filter
-// membacanya sebagai @RequestParam biasa saat layarnya dibuat.
+// `filter` dibongkar jadi map datar (T-042): react-admin selalu mengirim SATU parameter `filter`
+// berisi JSON, jadi "baca sebagai @RequestParam biasa" (rencana T-040) tak pernah bisa jalan.
+// Yang tetap ditahan: tak ada mesin filter generik yang menerjemahkan map itu ke SQL — tiap
+// resource memilih sendiri kunci yang ia dukung, dan kunci tak dikenal diabaikan.
 @Component
 class RaQuery(private val json: ObjectMapper) {
 
@@ -18,7 +19,10 @@ class RaQuery(private val json: ObjectMapper) {
             "$resource $offset-${offset + (jumlah - 1).coerceAtLeast(0)}/$total"
     }
 
-    data class Sort(val column: String, val ascending: Boolean)
+    data class Sort(val column: String, val ascending: Boolean) {
+        // Ditempelkan ke SQL oleh pemanggil; kolomnya sudah lewat daftar putih di `sort()`.
+        val arah: String get() = if (ascending) "ASC" else "DESC"
+    }
 
     fun page(range: String?): Page {
         val nilai = range?.takeIf { it.isNotBlank() }?.let {
@@ -30,6 +34,18 @@ class RaQuery(private val json: ObjectMapper) {
         // Batas atas ditegakkan server: klien yang meminta `[0, 999999]` (atau salah hitung) tak boleh
         // bisa menarik seluruh tabel dalam satu query.
         return Page(awal, (akhir - awal + 1).coerceIn(1, MAX_LIMIT))
+    }
+
+    // Nilai non-teks (angka/boolean) ikut jadi teks — pemanggil yang mengubahnya ke tipe yang ia
+    // butuhkan, karena hanya dia yang tahu kolomnya bigint atau bukan.
+    fun filter(raw: String?): Map<String, String> {
+        val isi = raw?.takeIf { it.isNotBlank() }?.let {
+            runCatching {
+                @Suppress("UNCHECKED_CAST")
+                json.readValue(it, Map::class.java) as Map<String, Any?>
+            }.getOrNull()
+        } ?: return emptyMap()
+        return isi.mapNotNull { (k, v) -> v?.let { k to it.toString() } }.toMap()
     }
 
     // Kolom sort di-whitelist pemanggil — nama kolom masuk ke SQL sebagai teks (tak bisa di-bind

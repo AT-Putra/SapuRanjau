@@ -45,8 +45,11 @@ class WinnerService(private val jdbc: JdbcClient, private val audit: AuditServic
 
     // Gugurkan pemenang — ALASAN WAJIB, tercatat audit, bukan aksi senyap (ADR-0021). Peringkat di
     // bawahnya naik satu tingkat dan kandidat eligible berikutnya mengisi peringkat terakhir.
+    // `adminId` diisi saat tombolnya ditekan orang di panel (T-042) — jejaknya lalu menyebut siapa,
+    // bukan "system". Tetap nullable karena aksi ini juga sah dipanggil tanpa panel (mis. skrip
+    // pemulihan), dan memaksa id palsu untuk kasus itu justru membuat audit berbohong.
     @Transactional
-    fun disqualify(winnerId: Long, reason: String) {
+    fun disqualify(winnerId: Long, reason: String, adminId: Long? = null) {
         if (reason.isBlank()) {
             throw ApiException(HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION, "Alasan gugur wajib diisi.")
         }
@@ -73,7 +76,8 @@ class WinnerService(private val jdbc: JdbcClient, private val audit: AuditServic
         val promoted = eligible(row.periodId, 1).firstOrNull()
         promoted?.let { insertWinner(row.periodId, it, row.rank + below.size) }
 
-        audit(
+        audit.record(
+            if (adminId != null) Actor.ADMIN else Actor.SYSTEM, adminId,
             "winner_disqualified", "winner:$winnerId",
             mapOf(
                 "periodId" to row.periodId, "userId" to row.userId, "originalRank" to row.rank,
