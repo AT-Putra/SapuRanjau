@@ -62,11 +62,14 @@ private fun App() {
         Box(modifier = Modifier.padding(padding)) {
             when (tujuan) {
                 Tujuan.CASUAL -> CasualScreen()
+
                 Tujuan.TURNAMEN -> TournamentScreen(
                     onMainCasual = { tujuan = Tujuan.CASUAL },
                     onBeliNyawa = { tujuan = Tujuan.NYAWA },
                 )
+
                 Tujuan.NYAWA -> WalletScreen(onMainCasual = { tujuan = Tujuan.CASUAL })
+
                 Tujuan.PERINGKAT -> LeaderboardScreen()
             }
         }

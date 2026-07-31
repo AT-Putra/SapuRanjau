@@ -2,6 +2,9 @@
 // Pakai:  plugins { id("sapuranjau.kotlin-library") }
 plugins {
     id("org.jetbrains.kotlin.jvm")
+    // Gate format/lint (T-002): ktlint lewat kotlinter. Task `check` otomatis memanggil lintKotlin,
+    // jadi `./gradlew build` gagal kalau formatnya melenceng — bukan sekadar tersedia kalau diingat.
+    id("org.jmailen.kotlinter")
 }
 
 kotlin {

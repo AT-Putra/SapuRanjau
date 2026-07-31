@@ -54,6 +54,7 @@ data class LevelUi(
 ) {
     val sisaBom: Int get() = mineCount - flags.size
     val bolehDisentuh: Boolean get() = status == LevelStatus.CONTINUE && !dijeda
+
     /** Nyawa berikutnya tak akan menaikkan skor level ini lagi — syarat isi dialog ADR-0037. */
     val skorSudahNol: Boolean get() = nyawa != null && nyawa.livesUsed >= nyawa.lifeCap
 }
@@ -210,9 +211,12 @@ class TournamentViewModel(
             } catch (e: ApiException) {
                 when (e.code) {
                     ApiErrorCode.LOCKED -> _state.value = TournamentUi.Terkunci
+
                     ApiErrorCode.BANNED -> _state.value = TournamentUi.Dilarang(null)
+
                     // Versi S&K-nya tak ada di error, dan menyetujui versi tebakan = 409 → tanya status.
                     ApiErrorCode.CONSENT_REQUIRED -> muat()
+
                     else -> _state.value = TournamentUi.Gagal(e.detail)
                 }
             } catch (e: Exception) {

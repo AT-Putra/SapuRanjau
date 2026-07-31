@@ -44,8 +44,8 @@ class RevealTest {
 
     @Test fun idempotentReveal() {
         val b = board()
-        engine.reveal(b, CellIndex(2, 2))            // buka semua
+        engine.reveal(b, CellIndex(2, 2)) // buka semua
         val again = assertIs<RevealResult.LevelCleared>(engine.reveal(b, CellIndex(2, 2)))
-        assertTrue(again.cells.isEmpty())            // tak ada yang baru
+        assertTrue(again.cells.isEmpty()) // tak ada yang baru
     }
 }

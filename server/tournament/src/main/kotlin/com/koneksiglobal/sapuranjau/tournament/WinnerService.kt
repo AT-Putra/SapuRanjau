@@ -33,7 +33,8 @@ class WinnerService(private val jdbc: JdbcClient, private val audit: AuditServic
         picked.forEachIndexed { i, userId -> insertWinner(periodId, userId, i + 1) }
 
         audit(
-            "winner_selected", "period:$periodId",
+            "winner_selected",
+            "period:$periodId",
             mapOf("slots" to slots, "picked" to picked.size),
         )
         if (picked.size < slots) {
@@ -77,11 +78,16 @@ class WinnerService(private val jdbc: JdbcClient, private val audit: AuditServic
         promoted?.let { insertWinner(row.periodId, it, row.rank + below.size) }
 
         audit.record(
-            if (adminId != null) Actor.ADMIN else Actor.SYSTEM, adminId,
-            "winner_disqualified", "winner:$winnerId",
+            if (adminId != null) Actor.ADMIN else Actor.SYSTEM,
+            adminId,
+            "winner_disqualified",
+            "winner:$winnerId",
             mapOf(
-                "periodId" to row.periodId, "userId" to row.userId, "originalRank" to row.rank,
-                "reason" to reason, "promotedUserId" to promoted,
+                "periodId" to row.periodId,
+                "userId" to row.userId,
+                "originalRank" to row.rank,
+                "reason" to reason,
+                "promotedUserId" to promoted,
             ),
         )
     }

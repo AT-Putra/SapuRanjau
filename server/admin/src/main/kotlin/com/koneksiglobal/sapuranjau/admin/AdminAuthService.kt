@@ -135,7 +135,8 @@ class AdminAuthService(
         ).params(listOf(EVENT_GAGAL, "admin:$username")).query(Long::class.java).single()
         if (gagal >= maxFailed) {
             throw ApiException(
-                HttpStatus.TOO_MANY_REQUESTS, ErrorCode.TOO_MANY_ATTEMPTS,
+                HttpStatus.TOO_MANY_REQUESTS,
+                ErrorCode.TOO_MANY_ATTEMPTS,
                 "Terlalu banyak percobaan login gagal. Coba lagi dalam 15 menit.",
             )
         }

@@ -111,8 +111,10 @@ private fun Board.floodFrom(from: CellIndex, opened: MutableList<RevealedCell>) 
         if (!revealed.add(c)) continue // sudah terbuka
         val adj = adjacentMines(c)
         opened += RevealedCell(c, adj)
-        if (adj == 0) for (n in neighbors(c)) {
-            if (n !in revealed && n !in mines && n !in flags) stack.addLast(n)
+        if (adj == 0) {
+            for (n in neighbors(c)) {
+                if (n !in revealed && n !in mines && n !in flags) stack.addLast(n)
+            }
         }
     }
 }
@@ -120,8 +122,11 @@ private fun Board.floodFrom(from: CellIndex, opened: MutableList<RevealedCell>) 
 // List diurut (y,x) agar identik antar client/server (ADR-0003); Cleared saat semua sel aman terbuka.
 private fun Board.result(opened: MutableList<RevealedCell>): RevealResult {
     opened.sortWith(compareBy({ it.index.y }, { it.index.x }))
-    return if (revealed.size == safeCellCount) RevealResult.LevelCleared(opened)
-    else RevealResult.Revealed(opened)
+    return if (revealed.size == safeCellCount) {
+        RevealResult.LevelCleared(opened)
+    } else {
+        RevealResult.Revealed(opened)
+    }
 }
 
 // internal (bukan private) → dipakai ulang NoGuess.kt (T-011).
@@ -130,10 +135,12 @@ internal fun Board.inBounds(c: CellIndex): Boolean =
 
 internal fun Board.neighbors(c: CellIndex): List<CellIndex> {
     val out = ArrayList<CellIndex>(8)
-    for (dy in -1..1) for (dx in -1..1) {
-        if (dx == 0 && dy == 0) continue
-        val n = CellIndex(c.x + dx, c.y + dy)
-        if (inBounds(n)) out += n
+    for (dy in -1..1) {
+        for (dx in -1..1) {
+            if (dx == 0 && dy == 0) continue
+            val n = CellIndex(c.x + dx, c.y + dy)
+            if (inBounds(n)) out += n
+        }
     }
     return out
 }

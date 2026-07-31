@@ -55,7 +55,8 @@ class AdminBootstrap(
         log.warn(
             "Akun admin awal '{}' dibuat (id={}). SEGERA: login ke /admin, selesaikan enrolment TOTP, " +
                 "lalu hapus sapuranjau.admin.bootstrap.* dari env-file.",
-            username.trim(), id,
+            username.trim(),
+            id,
         )
     }
 

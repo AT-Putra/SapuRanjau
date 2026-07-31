@@ -79,8 +79,11 @@ fun MineCell(
                     fontWeight = FontWeight.Bold,
                 )
             }
+
             CellState.Flagged -> Text("⚑", color = colors.flag, fontWeight = FontWeight.Bold)
+
             CellState.Mine -> Text("✱", color = MaterialTheme.colorScheme.onError, fontWeight = FontWeight.Bold)
+
             CellState.Hidden -> Unit
         }
     }

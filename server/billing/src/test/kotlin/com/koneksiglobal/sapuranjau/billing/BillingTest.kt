@@ -34,7 +34,9 @@ class FakePlay : PlayPurchases {
     override fun verify(productId: String, purchaseToken: String): PlayPurchase? =
         if (dikenal) PlayPurchase("order-$purchaseToken", sudahDibayar) else null
 
-    override fun consume(productId: String, purchaseToken: String) { consumeCount++ }
+    override fun consume(productId: String, purchaseToken: String) {
+        consumeCount++
+    }
 
     override fun listVoided(since: Instant): List<VoidedPurchase> = emptyList()
 }
@@ -70,7 +72,9 @@ class BillingTest {
     private var port: Int = 0
 
     @Autowired private lateinit var jdbc: JdbcClient
+
     @Autowired private lateinit var billing: BillingService
+
     @Autowired private lateinit var play: FakePlay
 
     private data class Resp(val status: Int, val body: String?)
@@ -201,8 +205,11 @@ class BillingTest {
         assertTrue(ban["period_start_id"] != null)
 
         assertEquals("voided", jdbc.sql("SELECT status FROM purchase").query(String::class.java).single())
-        assertEquals(1, jdbc.sql("SELECT count(*) FROM audit_event WHERE event_type = 'purchase_voided'")
-            .query(Long::class.java).single().toInt())
+        assertEquals(
+            1,
+            jdbc.sql("SELECT count(*) FROM audit_event WHERE event_type = 'purchase_voided'")
+                .query(Long::class.java).single().toInt(),
+        )
     }
 
     @Test
@@ -247,8 +254,11 @@ class BillingTest {
         assertTrue(billing.applyVoid("tok-1", VoidReason.REFUND))
         assertEquals(5, nyawa("clawed_back"))
         assertEquals(0, jdbc.sql("SELECT count(*) FROM tournament_ban").query(Long::class.java).single().toInt())
-        assertEquals(1, jdbc.sql("SELECT count(*) FROM audit_event WHERE event_type = 'purchase_voided_ban_deferred'")
-            .query(Long::class.java).single().toInt())
+        assertEquals(
+            1,
+            jdbc.sql("SELECT count(*) FROM audit_event WHERE event_type = 'purchase_voided_ban_deferred'")
+                .query(Long::class.java).single().toInt(),
+        )
     }
 
     @Test

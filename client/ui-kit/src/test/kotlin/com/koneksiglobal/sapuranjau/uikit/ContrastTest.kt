@@ -7,9 +7,9 @@ import com.koneksiglobal.sapuranjau.uikit.theme.DarkScheme
 import com.koneksiglobal.sapuranjau.uikit.theme.GameColors
 import com.koneksiglobal.sapuranjau.uikit.theme.LightGameColors
 import com.koneksiglobal.sapuranjau.uikit.theme.LightScheme
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import kotlin.math.pow
-import org.junit.jupiter.api.Assertions.assertTrue
 
 // Kontras angka 1–8 = janji aksesibilitas (03 §5 WCAG AA), jadi dijaga TEST — bukan komentar di
 // dokumen yang membusuk diam-diam. Nilai klasik apa adanya sempat gagal di tema terang

@@ -81,9 +81,13 @@ class BillingService(
         // Skor periode berjalan → 0 DAN dikunci. `score_locked` inilah yang dibaca `game` untuk
         // menolak start-level & pakai-nyawa (T-022/T-023); tanpa itu skor bisa naik lagi.
         val active = periodId("ACTIVE")
-        val zeroed = if (active == null) 0 else jdbc.sql(
-            "UPDATE run SET total_score = 0, score_locked = true, updated_at = now() WHERE user_id = ? AND period_id = ?",
-        ).params(p.userId, active).update()
+        val zeroed = if (active == null) {
+            0
+        } else {
+            jdbc.sql(
+                "UPDATE run SET total_score = 0, score_locked = true, updated_at = now() WHERE user_id = ? AND period_id = ?",
+            ).params(p.userId, active).update()
+        }
 
         val banStart = active ?: periodId("UPCOMING")
         if (banStart != null) {
@@ -104,8 +108,10 @@ class BillingService(
             if (banStart == null) "purchase_voided_ban_deferred" else "purchase_voided",
             "purchase:${p.id}",
             mapOf(
-                "reason" to reason.name.lowercase(), "livesClawedBack" to clawed,
-                "runsZeroed" to zeroed, "banPeriodStartId" to banStart,
+                "reason" to reason.name.lowercase(),
+                "livesClawedBack" to clawed,
+                "runsZeroed" to zeroed,
+                "banPeriodStartId" to banStart,
             ),
         )
         // Tanpa periode mana pun, ban tak bisa dicatat (period_start_id NOT NULL). Void & clawback

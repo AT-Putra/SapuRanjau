@@ -38,6 +38,7 @@ class AuditServiceTest {
     }
 
     @Autowired private lateinit var audit: AuditService
+
     @Autowired private lateinit var jdbc: JdbcClient
 
     @Test

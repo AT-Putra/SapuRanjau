@@ -161,7 +161,9 @@ class CasualViewModel(app: Application) : AndroidViewModel(app) {
                         engine.toggleFlag(b, at)
                         _state.update { it.copy(flags = if (at in it.flags) it.flags - at else it.flags + at) }
                     }
+
                     "CHORD" -> terapkan(engine.chord(b, at))
+
                     else -> terapkan(engine.reveal(b, at))
                 }
             }
@@ -172,10 +174,12 @@ class CasualViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { s ->
             when (hasil) {
                 is RevealResult.Revealed -> s.copy(revealed = s.revealed + hasil.cells.associate { it.index to it.adjacentMines })
+
                 is RevealResult.LevelCleared -> s.copy(
                     revealed = s.revealed + hasil.cells.associate { it.index to it.adjacentMines },
                     status = GameStatus.MENANG,
                 )
+
                 is RevealResult.HitMine -> s.copy(status = GameStatus.KALAH, explodedAt = hasil.at)
             }
         }

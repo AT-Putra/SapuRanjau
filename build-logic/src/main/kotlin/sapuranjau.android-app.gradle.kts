@@ -6,6 +6,9 @@ plugins {
     id("com.android.application")
     // Kotlin built-in sejak AGP 9.0 — lihat catatan di sapuranjau.android-library.
     id("org.jetbrains.kotlin.plugin.compose")
+    // Gate format/lint (T-002): ktlint lewat kotlinter. Task `check` otomatis memanggil lintKotlin,
+    // jadi `./gradlew build` gagal kalau formatnya melenceng — bukan sekadar tersedia kalau diingat.
+    id("org.jmailen.kotlinter")
 }
 
 extensions.configure<ApplicationExtension> {

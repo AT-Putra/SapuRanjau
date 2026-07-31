@@ -32,7 +32,7 @@ data class LevelConfigRow(
     val gridHeight: Int,
     val mineCount: Int,
     val baseScore: Int, // Base(L), ADR-0017
-    val lifeCap: Int,   // capNyawa, ADR-0017
+    val lifeCap: Int, // capNyawa, ADR-0017
 )
 
 interface LevelConfigRepo : CrudRepository<LevelConfigRow, Long> {

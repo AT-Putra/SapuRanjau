@@ -10,6 +10,9 @@ plugins {
     // TANPA `org.jetbrains.kotlin.android`: sejak AGP 9.0 dukungan Kotlin sudah built-in dan
     // menerapkannya justru gagal ("no longer required for Kotlin support since AGP 9.0").
     id("org.jetbrains.kotlin.plugin.compose") // Compose compiler = plugin Kotlin sejak 2.0
+    // Gate format/lint (T-002): ktlint lewat kotlinter. Task `check` otomatis memanggil lintKotlin,
+    // jadi `./gradlew build` gagal kalau formatnya melenceng — bukan sekadar tersedia kalau diingat.
+    id("org.jmailen.kotlinter")
 }
 
 // DSL baru AGP 9 (`android.newDsl=true` default) → tipe dari `com.android.build.api.dsl`,

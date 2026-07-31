@@ -43,7 +43,8 @@ class PrizeClaimService(
                 "ORDER BY p.starts_at DESC LIMIT 1",
         ).param(userId).query(Long::class.java).optional().orElse(null)
             ?: throw ApiException(
-                HttpStatus.CONFLICT, ErrorCode.CONFLICT,
+                HttpStatus.CONFLICT,
+                ErrorCode.CONFLICT,
                 "Tak ada hadiah yang bisa diklaim (belum menang, atau klaimnya sudah diproses admin).",
             )
 
@@ -62,7 +63,10 @@ class PrizeClaimService(
         // winner yang sama sudah berarti formulirnya diubah. Membedakannya butuh query tambahan
         // (atau trik `xmax = 0`) demi informasi yang sudah tersirat.
         audit.record(
-            Actor.PLAYER, userId, "prize_claim_saved", "winner:$winnerId",
+            Actor.PLAYER,
+            userId,
+            "prize_claim_saved",
+            "winner:$winnerId",
             // Nama field saja — TIDAK ada nomor HP / e-wallet / alamat di sini.
             mapOf("fields" to listOfNotNull("phone", ewallet?.let { "ewallet" }, address?.let { "address" })),
         )

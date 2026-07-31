@@ -21,9 +21,11 @@ internal fun Board.freshCopy(): Board = Board(config, seed, mines, firstClick)
 // region tanpa nebak. Board hasil generate selalu punya ≥1 (firstClick = sel-0 by construction).
 internal fun Board.canonicalStart(): CellIndex? {
     firstClick?.let { if (it !in mines && adjacentMines(it) == 0) return it }
-    for (y in 0 until config.gridHeight) for (x in 0 until config.gridWidth) {
-        val c = CellIndex(x, y)
-        if (c !in mines && adjacentMines(c) == 0) return c
+    for (y in 0 until config.gridHeight) {
+        for (x in 0 until config.gridWidth) {
+            val c = CellIndex(x, y)
+            if (c !in mines && adjacentMines(c) == 0) return c
+        }
     }
     return null
 }
@@ -46,18 +48,22 @@ private fun Board.deduce(): Pair<Set<CellIndex>, Set<CellIndex>> {
     val safe = LinkedHashSet<CellIndex>()
     val mine = LinkedHashSet<CellIndex>()
     // single-point / counting
-    for (con in cons) when {
-        con.need == 0 -> safe += con.hidden
-        con.need == con.hidden.size -> mine += con.hidden
+    for (con in cons) {
+        when {
+            con.need == 0 -> safe += con.hidden
+            con.need == con.hidden.size -> mine += con.hidden
+        }
     }
     // subset/counting: a.hidden ⊂ b.hidden → selisih terdeduksi. ponytail: O(C²) atas frontier;
     // frontier-segmentation (ADR-0031) hanya bila benchmark tunjuk ini hot di grid besar.
-    for (a in cons) for (b in cons) {
-        if (a === b || a.hidden.size >= b.hidden.size || !b.hidden.containsAll(a.hidden)) continue
-        val diff = b.hidden - a.hidden
-        when (b.need - a.need) {
-            0 -> safe += diff
-            diff.size -> mine += diff
+    for (a in cons) {
+        for (b in cons) {
+            if (a === b || a.hidden.size >= b.hidden.size || !b.hidden.containsAll(a.hidden)) continue
+            val diff = b.hidden - a.hidden
+            when (b.need - a.need) {
+                0 -> safe += diff
+                diff.size -> mine += diff
+            }
         }
     }
     return safe to mine
@@ -101,14 +107,21 @@ internal fun GameEngine.parPath(board: Board): Int {
             if (nbrs.none { it !in board.revealed && it !in board.flags }) continue
             val before = board.revealed.size
             chord(board, c)
-            if (board.revealed.size > before) { moves++; progressed = true }
+            if (board.revealed.size > before) {
+                moves++
+                progressed = true
+            }
         }
         if (progressed) continue
         // 3. tak ada chord → buka satu sel aman terdeduksi langsung (terkecil (y,x))
         val target = board.deduce().first
             .filter { it !in board.revealed }
             .minWithOrNull(compareBy({ it.y }, { it.x }))
-        if (target != null) { reveal(board, target); moves++; continue }
+        if (target != null) {
+            reveal(board, target)
+            moves++
+            continue
+        }
         break // buntu → deduksi tak bisa lanjut, dicek di bawah
     }
     // jangan diam-diam gagal (ADR-0031, konsisten dg generateNoGuess): par HANYA valid utk board
@@ -132,7 +145,10 @@ internal fun GameEngine.generateNoGuess(
 ): Board {
     val all = (0 until config.gridHeight).flatMap { y -> (0 until config.gridWidth).map { x -> CellIndex(x, y) } }
     require(firstClick in all) { "firstClick $firstClick di luar grid ${config.gridWidth}x${config.gridHeight}" }
-    val forbidden = HashSet<CellIndex>().apply { add(firstClick); addAll(firstClick.box()) }
+    val forbidden = HashSet<CellIndex>().apply {
+        add(firstClick)
+        addAll(firstClick.box())
+    }
     val allowed = all.filter { it !in forbidden } // sudah urut (y,x)
     require(config.mineCount in 0..allowed.size) {
         "mineCount ${config.mineCount} > kapasitas ${allowed.size} (grid − zona-aman klik-pertama) → density config mustahil (ADR-0031)"
@@ -172,4 +188,3 @@ private fun pickMines(allowed: List<CellIndex>, count: Int, rnd: Random): Set<Ce
     }
     return a.subList(0, count).toHashSet()
 }
-

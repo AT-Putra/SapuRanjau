@@ -133,7 +133,9 @@ class AdminTournamentController(
         val where = if (periodId == null) "" else "WHERE period_id = $periodId" // nilai sudah jadi Long, bukan teks klien
         val isi = jdbc.sql("SELECT * FROM level_config $where ORDER BY ${s.column} ${s.arah} OFFSET ? LIMIT ?")
             .params(h.offset, h.limit).query(::levelDto).list()
-        val total = if (periodId == null) hitung("level_config") else {
+        val total = if (periodId == null) {
+            hitung("level_config")
+        } else {
             jdbc.sql("SELECT count(*) FROM level_config WHERE period_id = ?").param(periodId).query(Long::class.java).single()
         }
         return ResponseEntity.ok().header("Content-Range", h.contentRange("levels", isi.size, total)).body(isi)
@@ -152,8 +154,13 @@ class AdminTournamentController(
             VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id
             """,
         ).params(
-            body.periodId.toLongOrNull() ?: bad("periodId tak sah."), body.levelIndex, body.gridWidth,
-            body.gridHeight, body.mineCount, body.baseScore, body.lifeCap,
+            body.periodId.toLongOrNull() ?: bad("periodId tak sah."),
+            body.levelIndex,
+            body.gridWidth,
+            body.gridHeight,
+            body.mineCount,
+            body.baseScore,
+            body.lifeCap,
         ).query(Long::class.java).single()
         audit.record(Actor.ADMIN, principal.id, "level_created", "level_config:$id", mapOf("periodId" to body.periodId, "index" to body.levelIndex))
         return satuLevel(id)
@@ -283,20 +290,31 @@ class AdminTournamentController(
             .orElseThrow { tidakAda("Konfigurasi hadiah", id) }
 
     private fun periodDto(rs: java.sql.ResultSet, @Suppress("UNUSED_PARAMETER") n: Int) = PeriodDto(
-        rs.getString("id"), rs.getString("name"),
-        rs.getTimestamp("starts_at").toInstant(), rs.getTimestamp("ends_at").toInstant(),
-        rs.getString("status"), rs.getInt("level_count"), rs.getBoolean("has_prize"),
+        rs.getString("id"),
+        rs.getString("name"),
+        rs.getTimestamp("starts_at").toInstant(),
+        rs.getTimestamp("ends_at").toInstant(),
+        rs.getString("status"),
+        rs.getInt("level_count"),
+        rs.getBoolean("has_prize"),
         rs.getInt("winner_count"),
     )
 
     private fun levelDto(rs: java.sql.ResultSet, @Suppress("UNUSED_PARAMETER") n: Int) = LevelDto(
-        rs.getString("id"), rs.getString("period_id"), rs.getInt("level_index"),
-        rs.getInt("grid_width"), rs.getInt("grid_height"), rs.getInt("mine_count"),
-        rs.getInt("base_score"), rs.getInt("life_cap"),
+        rs.getString("id"),
+        rs.getString("period_id"),
+        rs.getInt("level_index"),
+        rs.getInt("grid_width"),
+        rs.getInt("grid_height"),
+        rs.getInt("mine_count"),
+        rs.getInt("base_score"),
+        rs.getInt("life_cap"),
     )
 
     private fun prizeDto(rs: java.sql.ResultSet, @Suppress("UNUSED_PARAMETER") n: Int) = PrizeDto(
-        rs.getString("id"), rs.getString("period_id"), rs.getInt("winners_count"),
+        rs.getString("id"),
+        rs.getString("period_id"),
+        rs.getInt("winners_count"),
         json.readValue(rs.getString("prizes"), Array<String>::class.java).toList(),
     )
 

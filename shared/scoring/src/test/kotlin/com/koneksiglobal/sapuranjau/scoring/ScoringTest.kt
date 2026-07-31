@@ -53,9 +53,15 @@ class ScoringTest {
             params.copy(baseScore = 0),
             params.copy(baseScore = -50), // config rusak -> tetap tak boleh < 0
         )
-        for (m in movesSamples) for (t in timeSamples) for (l in livesSamples) for (p in paramSamples) {
-            val score = scoring.levelScore(par, LevelPlay(m, t, l), p)
-            assertTrue(score >= 0, "moves=$m time=$t lives=$l params=$p -> score=$score < 0")
+        for (m in movesSamples) {
+            for (t in timeSamples) {
+                for (l in livesSamples) {
+                    for (p in paramSamples) {
+                        val score = scoring.levelScore(par, LevelPlay(m, t, l), p)
+                        assertTrue(score >= 0, "moves=$m time=$t lives=$l params=$p -> score=$score < 0")
+                    }
+                }
+            }
         }
     }
 

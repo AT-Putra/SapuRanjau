@@ -15,11 +15,11 @@ class GeneratorBenchmark {
 
     @Test fun benchmarkGenerateLatency() {
         val probes = listOf(
-            Probe(9, 9, 10, n = 30, k = 200),   // beginner 12.3%
-            Probe(9, 9, 13, n = 20, k = 200),   // 16.0%
+            Probe(9, 9, 10, n = 30, k = 200), // beginner 12.3%
+            Probe(9, 9, 13, n = 20, k = 200), // 16.0%
             Probe(16, 16, 40, n = 20, k = 200), // intermediate 15.6%
             Probe(16, 16, 50, n = 12, k = 150), // 19.5%
-            Probe(16, 30, 99, n = 8, k = 80),   // expert 20.6% — sonda ceiling
+            Probe(16, 30, 99, n = 8, k = 80), // expert 20.6% — sonda ceiling
         )
         println("\n=== T-011 generate benchmark (density → latency, ADR-0031) ===")
         println("grid       mines  dens%   n  ok   p50ms  p95ms  maxms")
@@ -32,7 +32,8 @@ class GeneratorBenchmark {
                 val board = try {
                     engine.generateNoGuess(LevelConfig(p.w, p.h, p.mines), seed, fc, k = p.k)
                 } catch (e: IllegalStateException) {
-                    fails++; null
+                    fails++
+                    null
                 }
                 val ms = (System.nanoTime() - t0) / 1_000_000
                 if (board != null) {

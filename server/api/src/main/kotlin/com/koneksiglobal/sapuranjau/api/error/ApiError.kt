@@ -1,7 +1,6 @@
 package com.koneksiglobal.sapuranjau.api.error
 
 import jakarta.servlet.http.HttpServletResponse
-import tools.jackson.databind.ObjectMapper // Jackson 3 — mapper default Spring Boot 4 / Spring 7
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import org.springframework.http.HttpStatusCode
@@ -12,6 +11,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
 import org.springframework.web.context.request.WebRequest
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler
+import tools.jackson.databind.ObjectMapper // Jackson 3 — mapper default Spring Boot 4 / Spring 7
 
 // Skema error standar (ADR-0035, follow-up ADR-0033): RFC 7807 `application/problem+json` (bawaan
 // Spring `ProblemDetail`) + ekstensi `code` app-level yang stabil untuk klien.
@@ -24,9 +24,20 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
 // BAD_CREDENTIALS/TOTP_REQUIRED/TOO_MANY_ATTEMPTS/FORBIDDEN dipakai panel admin (T-040): SPA-nya
 // memilih layar dari kode ini — form password, kotak kode authenticator, atau pesan "coba lagi nanti".
 enum class ErrorCode {
-    UNAUTHENTICATED, VALIDATION, NOT_FOUND, CONFLICT, INTERNAL,
-    LOCKED, BANNED, CONSENT_REQUIRED, INTEGRITY_REQUIRED, INTEGRITY_FAILED,
-    BAD_CREDENTIALS, TOTP_REQUIRED, TOO_MANY_ATTEMPTS, FORBIDDEN,
+    UNAUTHENTICATED,
+    VALIDATION,
+    NOT_FOUND,
+    CONFLICT,
+    INTERNAL,
+    LOCKED,
+    BANNED,
+    CONSENT_REQUIRED,
+    INTEGRITY_REQUIRED,
+    INTEGRITY_FAILED,
+    BAD_CREDENTIALS,
+    TOTP_REQUIRED,
+    TOO_MANY_ATTEMPTS,
+    FORBIDDEN,
 }
 
 // Dilempar controller/service utk error terkendali → dipetakan ke ProblemDetail oleh advice.

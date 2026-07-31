@@ -92,7 +92,8 @@ class TournamentController(
         val name = req.displayName.trim()
         if (!NAME_PATTERN.matches(name)) {
             throw ApiException(
-                HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION,
+                HttpStatus.BAD_REQUEST,
+                ErrorCode.VALIDATION,
                 "Nama 2–20 karakter, hanya huruf/angka/spasi/titik/garis bawah/apostrof/strip.",
             )
         }

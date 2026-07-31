@@ -26,8 +26,16 @@ const val DEV_BASE_URL = "http://10.0.2.2:8080"
 // `UNKNOWN` menampung kode yang versi klien ini belum kenal: APK terpasang tak bisa dipaksa update,
 // jadi kode baru dari server harus berakhir sebagai pesan error biasa, bukan crash.
 enum class ApiErrorCode {
-    UNAUTHENTICATED, VALIDATION, NOT_FOUND, CONFLICT, INTERNAL,
-    LOCKED, BANNED, CONSENT_REQUIRED, INTEGRITY_REQUIRED, INTEGRITY_FAILED,
+    UNAUTHENTICATED,
+    VALIDATION,
+    NOT_FOUND,
+    CONFLICT,
+    INTERNAL,
+    LOCKED,
+    BANNED,
+    CONSENT_REQUIRED,
+    INTEGRITY_REQUIRED,
+    INTEGRITY_FAILED,
     UNKNOWN,
 }
 
@@ -88,7 +96,10 @@ class ApiClient(
 
         // ignoreUnknownKeys: server boleh menambah field tanpa mematikan APK lama.
         // coerceInputValues: nilai enum yang belum dikenal jatuh ke default (UNKNOWN) — alasan sama.
-        val json = Json { ignoreUnknownKeys = true; coerceInputValues = true }
+        val json = Json {
+            ignoreUnknownKeys = true
+            coerceInputValues = true
+        }
 
         fun defaultHttp(): OkHttpClient = OkHttpClient.Builder()
             .connectTimeout(10, TimeUnit.SECONDS)

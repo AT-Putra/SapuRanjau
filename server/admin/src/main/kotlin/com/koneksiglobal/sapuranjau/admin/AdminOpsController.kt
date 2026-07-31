@@ -127,10 +127,13 @@ class AdminOpsController(
             """,
         ).params(h.offset, h.limit).query { rs, _ ->
             ConsentDto(
-                rs.getString("id"), rs.getString("user_id"),
+                rs.getString("id"),
+                rs.getString("user_id"),
                 rs.getString("display_name") ?: "Pemain #${rs.getString("user_id")}",
-                rs.getString("period_id"), rs.getString("period_name"),
-                rs.getString("tnc_version"), rs.getTimestamp("agreed_at").toInstant(),
+                rs.getString("period_id"),
+                rs.getString("period_name"),
+                rs.getString("tnc_version"),
+                rs.getTimestamp("agreed_at").toInstant(),
             )
         }.list()
         val total = jdbc.sql("SELECT count(*) FROM tournament_consent").query(Long::class.java).single()
@@ -173,9 +176,18 @@ class AdminOpsController(
         // masuk SQL sebagai teks.
         val syarat = mutableListOf<String>()
         val nilai = mutableListOf<Any>()
-        f["actorType"]?.let { syarat += "actor_type = ?"; nilai += it }
-        f["eventType"]?.let { syarat += "event_type = ?"; nilai += it }
-        f["target"]?.let { syarat += "target = ?"; nilai += it }
+        f["actorType"]?.let {
+            syarat += "actor_type = ?"
+            nilai += it
+        }
+        f["eventType"]?.let {
+            syarat += "event_type = ?"
+            nilai += it
+        }
+        f["target"]?.let {
+            syarat += "target = ?"
+            nilai += it
+        }
         val where = if (syarat.isEmpty()) "" else "WHERE ${syarat.joinToString(" AND ")}"
 
         val isi = jdbc.sql(
@@ -183,8 +195,12 @@ class AdminOpsController(
                 "FROM audit_event $where ORDER BY ${s.column} ${s.arah} OFFSET ? LIMIT ?",
         ).params(nilai + listOf(h.offset, h.limit)).query { rs, _ ->
             AuditDto(
-                rs.getString("id"), rs.getString("actor_type"), rs.getString("actor_id"),
-                rs.getString("event_type"), rs.getString("target"), rs.getString("detail"),
+                rs.getString("id"),
+                rs.getString("actor_type"),
+                rs.getString("actor_id"),
+                rs.getString("event_type"),
+                rs.getString("target"),
+                rs.getString("detail"),
                 rs.getTimestamp("created_at").toInstant(),
             )
         }.list()

@@ -27,6 +27,9 @@ junitJupiter = "6.1.2"
 okhttp = "5.4.0"
 kotlinxSerialization = "1.11.0"
 kotlinxCoroutines = "1.11.0"
+# Gate format/lint (T-002). kotlinter membungkus ktlint; dipilih karena RILISNYA HIDUP
+# (5.6.0, Juli 2026) — pelajaran ADR-0013: plugin basi di jalur build rilis = risiko tak perlu.
+kotlinter = "5.6.0"
 
 [libraries]
 # Artefak plugin utk convention plugins (dipakai di build-logic/, bukan modul biasa).
@@ -34,6 +37,7 @@ kotlin-gradlePlugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", ve
 kotlin-allopen = { module = "org.jetbrains.kotlin:kotlin-allopen", version.ref = "kotlin" }
 springBoot-gradlePlugin = { module = "org.springframework.boot:spring-boot-gradle-plugin", version.ref = "springBoot" }
 springDependencyManagement-gradlePlugin = { module = "io.spring.gradle:dependency-management-plugin", version.ref = "springDependencyManagement" }
+kotlinter-gradlePlugin = { module = "org.jmailen.gradle:kotlinter-gradle", version.ref = "kotlinter" }
 
 # Dependency runtime modul diisi per-task saat dibutuhkan.
 flyway-core = { module = "org.flywaydb:flyway-core", version.ref = "flyway" }

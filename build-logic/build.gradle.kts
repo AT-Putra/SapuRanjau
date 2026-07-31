@@ -12,4 +12,7 @@ dependencies {
     // Fase client: convention android-* memanggil id("com.android.…") & plugin Compose tanpa versi.
     implementation(libs.android.gradlePlugin)
     implementation(libs.kotlin.composePlugin)
+    // Gate format/lint (T-002) — dipasang di setiap convention plugin, jadi modul baru ikut
+    // otomatis dan tak ada yang bisa "lupa" mendaftar.
+    implementation(libs.kotlinter.gradlePlugin)
 }

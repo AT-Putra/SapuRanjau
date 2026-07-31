@@ -32,6 +32,16 @@ Game Minesweeper untuk Android dengan mode **Casual** (latihan) dan **kompetitif
 cd admin-web && npm ci && npm run dev
 ```
 
+## Gaya kode
+
+Format Kotlin dijaga **ktlint** (lewat kotlinter) dan ikut `./gradlew build` — build gagal kalau
+format melenceng. Konfigurasinya ada di `.editorconfig`, dibaca IDE dan ktlint sekaligus.
+
+```bash
+./gradlew formatKotlin   # rapikan otomatis
+./gradlew lintKotlin     # periksa saja
+```
+
 ## Struktur
 
 Multi-modul Gradle; batas modul ditegakkan sebagai batas Gradle (modular monolith).

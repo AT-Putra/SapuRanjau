@@ -93,7 +93,10 @@ class AdminUserController(
             audit.record(Actor.ADMIN, principal.id, "admin_password_reset", "admin:${target.username}")
         }
         audit.record(
-            Actor.ADMIN, principal.id, "admin_updated", "admin:${target.username}",
+            Actor.ADMIN,
+            principal.id,
+            "admin_updated",
+            "admin:${target.username}",
             mapOf("role" to peranBaru.dbValue, "disabled" to body.disabled),
         )
         return dto(users.byId(id)!!)

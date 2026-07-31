@@ -44,6 +44,7 @@ class AdminAuthController(
                 masuk(request, hasil.principal)
                 LoginResponse("OK", hasil.principal.username, hasil.principal.role.dbValue)
             }
+
             is LoginOutcome.SetupTotp -> {
                 // Sesi ini BELUM terautentikasi — ia cuma memegang secret yang menunggu dikonfirmasi.
                 sesiBaru(request).setAttribute(AdminSessionFilter.ATTR_PENDING_TOTP, hasil.pending)

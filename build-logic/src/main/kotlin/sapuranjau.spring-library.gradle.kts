@@ -5,6 +5,9 @@ plugins {
     id("org.jetbrains.kotlin.plugin.spring")   // buka kelas @Component/@Configuration utk proxy Spring
     id("org.springframework.boot")               // BOM + BTA stabil (tanpa ini: NPE getPluginClasspaths di Kotlin 2.4.10 BTA)
     id("io.spring.dependency-management")
+    // Gate format/lint (T-002): ktlint lewat kotlinter. Task `check` otomatis memanggil lintKotlin,
+    // jadi `./gradlew build` gagal kalau formatnya melenceng — bukan sekadar tersedia kalau diingat.
+    id("org.jmailen.kotlinter")
 }
 
 kotlin {

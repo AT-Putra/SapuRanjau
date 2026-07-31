@@ -148,7 +148,10 @@ class PeriodService(
                 "INSERT INTO tournament_ban (user_id, reason, purchase_id, period_start_id) VALUES (?, ?, ?, ?)",
             ).params(userId, reason, purchaseId, activeId).update()
             audit.record(
-                Actor.SYSTEM, userId, "tournament_ban_issued", "purchase:$purchaseId",
+                Actor.SYSTEM,
+                userId,
+                "tournament_ban_issued",
+                "purchase:$purchaseId",
                 mapOf("reason" to reason, "periodStartId" to activeId, "deferred" to true),
             )
             log.warn("Ban tertunda purchase $purchaseId diterbitkan mulai periode $activeId")

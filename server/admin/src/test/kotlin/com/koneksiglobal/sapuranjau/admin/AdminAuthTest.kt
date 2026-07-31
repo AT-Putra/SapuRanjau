@@ -64,10 +64,15 @@ class AdminAuthTest {
     private var port: Int = 0
 
     @Autowired private lateinit var jdbc: JdbcClient
+
     @Autowired private lateinit var users: AdminUsers
+
     @Autowired private lateinit var encoder: PasswordEncoder
+
     @Autowired private lateinit var pii: PiiCipher
+
     @Autowired private lateinit var mapper: ObjectMapper
+
     @Autowired private lateinit var bootstrap: AdminBootstrap
 
     @BeforeEach
@@ -241,7 +246,8 @@ class AdminAuthTest {
         assertEquals("admin-users 0-2/3", semua.contentRange)
 
         val halaman = get(
-            "/admin/api/admin-users", cookie = cookie,
+            "/admin/api/admin-users",
+            cookie = cookie,
             params = mapOf("range" to "[0,1]", "sort" to """["username","DESC"]"""),
         )
         assertEquals("admin-users 0-1/3", halaman.contentRange)
@@ -255,7 +261,8 @@ class AdminAuthTest {
     fun `kolom sort di luar daftar putih tak sampai ke SQL`() {
         val cookie = sesi("operator")
         val nakal = get(
-            "/admin/api/admin-users", cookie = cookie,
+            "/admin/api/admin-users",
+            cookie = cookie,
             params = mapOf("sort" to """["id;DROP TABLE admin_user","ASC"]"""),
         )
         assertEquals(200, nakal.status) // jatuh ke kolom default, bukan 500 atau tabel hilang

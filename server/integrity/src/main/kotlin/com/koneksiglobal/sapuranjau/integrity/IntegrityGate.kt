@@ -42,7 +42,8 @@ class IntegrityGate(
         is IntegrityVerdict.Fail -> {
             audit.record(Actor.SYSTEM, userId, "integrity_failed", null, mapOf("reason" to v.reason))
             throw ApiException(
-                HttpStatus.FORBIDDEN, ErrorCode.INTEGRITY_FAILED,
+                HttpStatus.FORBIDDEN,
+                ErrorCode.INTEGRITY_FAILED,
                 "Perangkat atau aplikasi ini tak lolos pemeriksaan keamanan Google Play.",
             )
         }
@@ -62,7 +63,8 @@ class IntegrityGate(
             .param(userId).query(Boolean::class.javaObjectType).optional().orElse(false)
         if (ok != true) {
             throw ApiException(
-                HttpStatus.FORBIDDEN, ErrorCode.INTEGRITY_REQUIRED,
+                HttpStatus.FORBIDDEN,
+                ErrorCode.INTEGRITY_REQUIRED,
                 "Perangkat perlu diperiksa dulu (POST /v1/integrity).",
             )
         }

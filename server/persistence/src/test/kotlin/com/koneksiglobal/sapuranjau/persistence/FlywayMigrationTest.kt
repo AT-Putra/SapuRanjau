@@ -3,8 +3,8 @@ package com.koneksiglobal.sapuranjau.persistence
 import org.flywaydb.core.Flyway
 import org.junit.jupiter.api.Test
 import org.testcontainers.junit.jupiter.Container
-import org.testcontainers.postgresql.PostgreSQLContainer
 import org.testcontainers.junit.jupiter.Testcontainers
+import org.testcontainers.postgresql.PostgreSQLContainer
 import org.testcontainers.utility.DockerImageName
 import java.io.File
 import java.sql.DriverManager
@@ -47,7 +47,10 @@ class FlywayMigrationTest {
         DriverManager.getConnection(postgres.jdbcUrl, postgres.username, postgres.password).use { conn ->
             val id = conn.createStatement()
                 .executeQuery("INSERT INTO audit_event (actor_type, event_type) VALUES ('system', 'test') RETURNING id")
-                .let { it.next(); it.getLong("id") }
+                .let {
+                    it.next()
+                    it.getLong("id")
+                }
 
             assertFailsWith<SQLException> {
                 conn.createStatement().execute("UPDATE audit_event SET event_type = 'x' WHERE id = $id")

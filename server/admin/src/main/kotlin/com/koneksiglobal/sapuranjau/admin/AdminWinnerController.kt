@@ -126,11 +126,13 @@ class AdminWinnerController(
             "SELECT winner_id, status, phone_enc, ewallet_enc, address_enc, prize_value, paid_at FROM prize_claim WHERE winner_id = ?",
         ).param(id).query { rs, _ ->
             ClaimPiiDto(
-                rs.getString("winner_id"), rs.getString("status"),
+                rs.getString("winner_id"),
+                rs.getString("status"),
                 pii.decrypt(rs.getBytes("phone_enc")),
                 rs.getBytes("ewallet_enc")?.let(pii::decrypt),
                 rs.getBytes("address_enc")?.let(pii::decrypt),
-                rs.getBigDecimal("prize_value"), rs.getTimestamp("paid_at")?.toInstant(),
+                rs.getBigDecimal("prize_value"),
+                rs.getTimestamp("paid_at")?.toInstant(),
             )
         }.optional().orElseThrow {
             ApiException(HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, "Pemenang ini belum mengisi form klaim.")
@@ -139,7 +141,10 @@ class AdminWinnerController(
         // (pola T-029) — kalau tidak, `audit_event` yang append-only berubah jadi salinan kedua PII
         // tanpa enkripsi, dan salinan itu tak bisa dihapus.
         audit.record(
-            Actor.ADMIN, principal.id, "prize_claim_pii_read", "winner:$id",
+            Actor.ADMIN,
+            principal.id,
+            "prize_claim_pii_read",
+            "winner:$id",
             mapOf("fields" to listOfNotNull("phone", dto.ewallet?.let { "ewallet" }, dto.address?.let { "address" })),
         )
         return dto

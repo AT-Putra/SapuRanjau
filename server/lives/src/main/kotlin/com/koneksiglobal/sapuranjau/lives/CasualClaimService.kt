@@ -118,12 +118,18 @@ class CasualClaimService(
             val at = CellIndex(m.x, m.y)
             when (m.action) {
                 CasualAction.FLAG -> engine.toggleFlag(board, at)
+
                 CasualAction.REVEAL, CasualAction.CHORD -> {
                     val r = if (m.action == CasualAction.REVEAL) engine.reveal(board, at) else engine.chord(board, at)
                     when (r) {
                         is RevealResult.HitMine -> bad("Replay itu kalah (kena bom), bukan menang.")
+
                         is RevealResult.Revealed -> if (r.cells.isNotEmpty()) scored++
-                        is RevealResult.LevelCleared -> { scored++; cleared = true }
+
+                        is RevealResult.LevelCleared -> {
+                            scored++
+                            cleared = true
+                        }
                     }
                 }
             }
@@ -148,11 +154,18 @@ class CasualClaimService(
         // `actor_type='player'` membuat barisnya terbaca "pemain melakukan casual_claim_anomaly"
         // persis di dokumen yang dipakai menangani banding. Pemainnya tetap di `actor_id`.
         audit.record(
-            Actor.SYSTEM, userId, "casual_claim_anomaly", "seed:${req.seed}",
+            Actor.SYSTEM,
+            userId,
+            "casual_claim_anomaly",
+            "seed:${req.seed}",
             mapOf(
-                "signals" to signals, "moves" to v.scored, "par" to v.par,
-                "elapsedMs" to req.elapsedMs, "msPerMove" to msPerMove,
-                "grid" to "${req.gridWidth}x${req.gridHeight}", "mines" to req.mineCount,
+                "signals" to signals,
+                "moves" to v.scored,
+                "par" to v.par,
+                "elapsedMs" to req.elapsedMs,
+                "msPerMove" to msPerMove,
+                "grid" to "${req.gridWidth}x${req.gridHeight}",
+                "mines" to req.mineCount,
             ),
         )
     }
@@ -171,6 +184,7 @@ class CasualClaimService(
         const val MAX_CELLS = 1024
         const val MAX_DENSITY = 0.30
         const val MAX_MOVES_PER_CELL = 4 // flag/unflag berulang → log sah bisa > jumlah sel
+
         // ponytail: satu ambang datar. Kalibrasi per-grid milik T-027 yang memang punya datanya.
         const val MIN_MS_PER_MOVE = 80
     }

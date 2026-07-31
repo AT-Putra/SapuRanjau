@@ -61,10 +61,15 @@ class AdminDomainTest {
     private var port: Int = 0
 
     @Autowired private lateinit var jdbc: JdbcClient
+
     @Autowired private lateinit var users: AdminUsers
+
     @Autowired private lateinit var encoder: PasswordEncoder
+
     @Autowired private lateinit var pii: PiiCipher
+
     @Autowired private lateinit var mapper: ObjectMapper
+
     @Autowired private lateinit var gate: TournamentGate
 
     @BeforeEach
@@ -207,8 +212,13 @@ class AdminDomainTest {
         val terlaluPadat = post(
             "/admin/api/levels",
             mapOf(
-                "periodId" to p1.toString(), "levelIndex" to 1, "gridWidth" to 9, "gridHeight" to 9,
-                "mineCount" to 40, "baseScore" to 1000, "lifeCap" to 2,
+                "periodId" to p1.toString(),
+                "levelIndex" to 1,
+                "gridWidth" to 9,
+                "gridHeight" to 9,
+                "mineCount" to 40,
+                "baseScore" to 1000,
+                "lifeCap" to 2,
             ),
             cookie,
         )
@@ -223,8 +233,13 @@ class AdminDomainTest {
         val diP2 = post(
             "/admin/api/levels",
             mapOf(
-                "periodId" to p2.toString(), "levelIndex" to 0, "gridWidth" to 9, "gridHeight" to 9,
-                "mineCount" to 10, "baseScore" to 1000, "lifeCap" to 2,
+                "periodId" to p2.toString(),
+                "levelIndex" to 0,
+                "gridWidth" to 9,
+                "gridHeight" to 9,
+                "mineCount" to 10,
+                "baseScore" to 1000,
+                "lifeCap" to 2,
             ),
             cookie,
         )
@@ -235,7 +250,10 @@ class AdminDomainTest {
         // Level hanya bisa dihapus selama periodenya belum berjalan.
         val levelP2 = jdbc.sql("SELECT id FROM level_config WHERE period_id = ?").param(p2).query(Long::class.java).single()
         val ditolak = client.delete().uri("/admin/api/levels/$levelP2")
-            .headers { h -> h.set("X-Requested-With", "XMLHttpRequest"); h.set("Cookie", cookie) }
+            .headers { h ->
+                h.set("X-Requested-With", "XMLHttpRequest")
+                h.set("Cookie", cookie)
+            }
             .exchange { _, res -> resp(res) }
         assertEquals(409, ditolak.status)
     }

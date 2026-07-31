@@ -102,7 +102,9 @@ class GameService(
                 val seed = random.nextLong()
                 boards.save(BoardRow(runId = run.id, levelConfigId = cfg.id, seed = seed, commitHash = commitOf(seed)))
             }
+
             existing.status == "active" -> existing
+
             // One-shot (ADR-0024): level bersih sekali, tak ada seed baru untuk level yang sudah selesai.
             else -> throw ApiException(HttpStatus.CONFLICT, ErrorCode.CONFLICT, "Level ini sudah selesai (one-shot).")
         }
@@ -202,7 +204,10 @@ class GameService(
             // belum pernah bertemu pemain nyata, dan interupsi jujur juga menaikkan angka ini.
             if (pauses == pauseAuditThreshold) {
                 audit.record(
-                    Actor.SYSTEM, user.id!!, "pause_excessive", run.id.toString(),
+                    Actor.SYSTEM,
+                    user.id!!,
+                    "pause_excessive",
+                    run.id.toString(),
                     mapOf("levelIndex" to cfg.levelIndex, "pauseCount" to pauses),
                 )
             }
@@ -324,9 +329,15 @@ class GameService(
             MoveAction.FLAG -> {
                 if (m.cell in s.revealed) return Outcome(m, ActionResult.NO_OP, record = false) // cermin engine
                 engine.toggleFlag(board, m.cell)
-                val on = if (s.flags.add(m.cell)) true else { s.flags.remove(m.cell); false }
+                val on = if (s.flags.add(m.cell)) {
+                    true
+                } else {
+                    s.flags.remove(m.cell)
+                    false
+                }
                 Outcome(m, if (on) ActionResult.FLAGGED else ActionResult.UNFLAGGED, scored = 0) // flag gratis (ADR-0018)
             }
+
             // Nyawa (ADR-0037): bom penyebab mati ditandai flag → tak bisa membunuh lagi, dan pemain
             // memang berhak tahu letaknya (dia sudah membayar). Flag = 0 langkah (ADR-0018); penalti
             // skornya lewat livesUsed (ADR-0017). `dead` dimiliki apply() (satu-satunya transisi
@@ -338,6 +349,7 @@ class GameService(
                 s.livesUsed++
                 Outcome(m, ActionResult.FLAGGED, scored = 0)
             }
+
             MoveAction.REVEAL, MoveAction.CHORD -> {
                 val r = if (m.action == MoveAction.REVEAL) engine.reveal(board, m.cell) else engine.chord(board, m.cell)
                 when (r) {
@@ -348,9 +360,14 @@ class GameService(
                         s.deadAt = r.at
                         Outcome(m, ActionResult.HIT_MINE, dead = true)
                     }
+
                     is RevealResult.Revealed ->
-                        if (r.cells.isEmpty()) Outcome(m, ActionResult.NO_OP, record = false) // tak ada yang terbuka = bukan langkah
-                        else Outcome(m, ActionResult.REVEALED, cells = s.absorb(r.cells))
+                        if (r.cells.isEmpty()) {
+                            Outcome(m, ActionResult.NO_OP, record = false) // tak ada yang terbuka = bukan langkah
+                        } else {
+                            Outcome(m, ActionResult.REVEALED, cells = s.absorb(r.cells))
+                        }
+
                     is RevealResult.LevelCleared -> Outcome(m, ActionResult.LEVEL_CLEARED, cells = s.absorb(r.cells), cleared = true)
                 }
             }
@@ -367,9 +384,14 @@ class GameService(
 
         scores.save(
             LevelScoreRow(
-                runId = run.id!!, levelConfigId = cfg.id!!, moves = MoveCodec.encode(s.moves),
-                movesCount = s.scoredMoves, parMoves = parMoves, activeTimeMs = s.activeMs,
-                livesUsed = s.livesUsed, score = score,
+                runId = run.id!!,
+                levelConfigId = cfg.id!!,
+                moves = MoveCodec.encode(s.moves),
+                movesCount = s.scoredMoves,
+                parMoves = parMoves,
+                activeTimeMs = s.activeMs,
+                livesUsed = s.livesUsed,
+                score = score,
             ),
         )
         val next = run.currentLevel + 1
@@ -392,7 +414,9 @@ class GameService(
         // Sinyal anomali bot (T-027) — dari angka yang sudah dihitung di atas, tanpa query tambahan
         // di jalur selesai-level. MENANDAI, tak memblokir (ARCH §9, ADR-0037).
         anomali.inspectLevel(
-            userId = run.userId, runId = run.id!!, levelIndex = cfg.levelIndex,
+            userId = run.userId,
+            runId = run.id!!,
+            levelIndex = cfg.levelIndex,
             play = LevelFacts(s.scoredMoves, parMoves, s.activeMs, s.livesUsed, cfg.lifeCap),
         )
 

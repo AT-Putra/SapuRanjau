@@ -52,7 +52,9 @@ class AdminSessionFilter(private val mapper: ObjectMapper) : OncePerRequestFilte
         // membuka CORS di prod: SPA-nya se-origin). Tanpa token, tanpa state server.
         if (request.method !in AMAN && request.getHeader("X-Requested-With") != XHR) {
             response.writeProblem(
-                mapper, HttpStatus.FORBIDDEN, ErrorCode.FORBIDDEN,
+                mapper,
+                HttpStatus.FORBIDDEN,
+                ErrorCode.FORBIDDEN,
                 "Permintaan ditolak: header X-Requested-With wajib (proteksi CSRF).",
             )
             return

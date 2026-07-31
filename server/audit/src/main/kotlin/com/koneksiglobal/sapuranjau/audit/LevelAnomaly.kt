@@ -29,16 +29,22 @@ class LevelAnomalyDetector(
         val signals = signalsOf(play, minMsPerMove, livesOverCap)
         if (signals.isEmpty()) return
         audit.record(
-            Actor.SYSTEM, userId, "level_anomaly", "run:$runId",
+            Actor.SYSTEM,
+            userId,
+            "level_anomaly",
+            "run:$runId",
             mapOf(
-                "signals" to signals, "levelIndex" to levelIndex,
-                "moves" to play.moves, "parMoves" to play.parMoves,
-                "activeTimeMs" to play.activeTimeMs, "msPerMove" to play.msPerMove(),
-                "livesUsed" to play.livesUsed, "lifeCap" to play.lifeCap,
+                "signals" to signals,
+                "levelIndex" to levelIndex,
+                "moves" to play.moves,
+                "parMoves" to play.parMoves,
+                "activeTimeMs" to play.activeTimeMs,
+                "msPerMove" to play.msPerMove(),
+                "livesUsed" to play.livesUsed,
+                "lifeCap" to play.lifeCap,
             ),
         )
     }
-
 }
 
 // Aturannya murni fungsi dari angka yang sudah dihitung `game` saat menutup level — tak ada query

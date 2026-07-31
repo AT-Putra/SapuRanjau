@@ -24,7 +24,11 @@ class BillingController(private val billing: BillingService) {
 data class VerifyRequest(val productId: String, val purchaseToken: String)
 
 enum class PurchaseStatus {
-    PENDING, VERIFIED, GRANTED, VOIDED;
+    PENDING,
+    VERIFIED,
+    GRANTED,
+    VOIDED,
+    ;
 
     companion object {
         fun of(dbValue: String): PurchaseStatus = valueOf(dbValue.uppercase())

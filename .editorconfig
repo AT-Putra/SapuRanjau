@@ -1,0 +1,41 @@
+# Gaya kode repo (T-002). Dibaca IDE **dan** ktlint (lewat kotlinter) — satu sumber, bukan dua.
+root = true
+
+[*]
+charset = utf-8
+indent_style = space
+indent_size = 4
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{kt,kts}]
+# `intellij_idea` = gaya default IntelliJ, yaitu gaya yang dipakai menulis seluruh kode ini.
+# `ktlint_official` akan memformat ulang hampir semua berkas demi selera yang tak kami sepakati —
+# gate ini dipasang untuk menjaga konsistensi, bukan untuk memulai perang gaya.
+ktlint_code_style = intellij_idea
+
+# Panjang baris TIDAK ditegakkan. Komentar di repo ini adalah prosa yang menjelaskan keputusan
+# (kenapa, bukan apa) dan sering memuat kutipan SQL/nama properti; membungkusnya secara mekanis
+# merusak keterbacaannya, dan itu justru satu-satunya hal yang membuat komentarnya berharga.
+# Yang dijaga gate ini = format KODE yang konsisten.
+ktlint_standard_max-line-length = disabled
+
+# Nama test ditulis sebagai kalimat dalam backtick (`fun \`ban yang diampuni ditandai\`()`) —
+# konvensi Kotlin/JUnit yang dipakai konsisten di seluruh repo.
+ktlint_standard_function-naming = disabled
+
+# DIMATIKAN karena diukur, bukan karena selera: dengan panjang baris tak dibatasi (di atas), aturan
+# ini menarik body ekspresi ke baris yang sama TANPA batas — percobaan pertama menghasilkan baris
+# 145 karakter dari fungsi yang sengaja ditulis dua baris. Ia memperbaiki konsistensi nol dan
+# memperburuk keterbacaan; keputusan "body di baris yang sama atau tidak" ditinggalkan ke penulis.
+ktlint_standard_function-signature = disabled
+
+ij_kotlin_allow_trailing_comma = true
+ij_kotlin_allow_trailing_comma_on_call_site = true
+
+[*.{yml,yaml,json,md}]
+indent_size = 2
+
+[*.sql]
+# Migrasi Flyway: indentasi mengikuti gaya DDL yang sudah ada di V1..V22.
+indent_size = 2

@@ -49,15 +49,22 @@ class TournamentGate(
         val g = check(userId)
         return when (g.status) {
             TournamentStatus.OK -> g.periodId!!
+
             TournamentStatus.LOCKED -> throw ApiException(
-                HttpStatus.CONFLICT, ErrorCode.LOCKED, "Tak ada periode turnamen aktif.",
+                HttpStatus.CONFLICT,
+                ErrorCode.LOCKED,
+                "Tak ada periode turnamen aktif.",
             )
+
             TournamentStatus.BANNED -> throw ApiException(
-                HttpStatus.FORBIDDEN, ErrorCode.BANNED,
+                HttpStatus.FORBIDDEN,
+                ErrorCode.BANNED,
                 "Akun ini tak bisa ikut turnamen (${g.banPeriodsLeft} periode lagi).",
             )
+
             TournamentStatus.CONSENT_REQUIRED -> throw ApiException(
-                HttpStatus.FORBIDDEN, ErrorCode.CONSENT_REQUIRED,
+                HttpStatus.FORBIDDEN,
+                ErrorCode.CONSENT_REQUIRED,
                 "Setujui Syarat & Ketentuan turnamen dulu (versi ${g.tncVersion}).",
             )
         }
@@ -70,7 +77,8 @@ class TournamentGate(
     fun agree(userId: Long, version: String): GateStatus {
         if (version != tncVersion) {
             throw ApiException(
-                HttpStatus.CONFLICT, ErrorCode.CONFLICT,
+                HttpStatus.CONFLICT,
+                ErrorCode.CONFLICT,
                 "Versi S&K sudah berubah jadi $tncVersion — muat ulang naskahnya.",
             )
         }

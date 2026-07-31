@@ -65,6 +65,7 @@ class GameFlowTest {
     private var port: Int = 0
 
     @Autowired private lateinit var jdbc: JdbcClient
+
     @Autowired private lateinit var game: GameService
 
     private val engine = MinesweeperEngine()
@@ -83,7 +84,8 @@ class GameFlowTest {
             "INSERT INTO period (name, starts_at, ends_at, status) " +
                 "VALUES ('test', now(), now() + interval '30 days', 'ACTIVE') RETURNING id",
         ).query(Long::class.java).single()
-        repeat(2) { i -> // 2 level → uji `current_level` maju & `completed_all_at` (tie-breaker §8.2 #4)
+        repeat(2) { i ->
+            // 2 level → uji `current_level` maju & `completed_all_at` (tie-breaker §8.2 #4)
             jdbc.sql(
                 "INSERT INTO level_config (period_id, level_index, grid_width, grid_height, mine_count, base_score, life_cap) " +
                     "VALUES (?, ?, ?, ?, ?, 1000, 3)",
@@ -92,7 +94,10 @@ class GameFlowTest {
         game.evictAllSessions()
         // Gerbang S&K (ADR-0026, T-026) berlaku untuk SEMUA jalur turnamen: tanpa persetujuan,
         // `start` dibalas 403. Test alur permainan menyetujuinya di muka lewat endpoint sungguhan.
-        listOf("pemain-1", "pemain-2").forEach { setujuiSK(it); attest(it) }
+        listOf("pemain-1", "pemain-2").forEach {
+            setujuiSK(it)
+            attest(it)
+        }
     }
 
     // Inti ADR-0028: jam skor BERHENTI saat app ke background. Tanpa pause, jeda itu menumpuk jadi
@@ -127,7 +132,10 @@ class GameFlowTest {
     fun `pause berulang menaikkan hitungan dan menandai audit di ambang`() {
         val s = startTerkunci()
         actOk(s.runId, MoveAction.REVEAL, first)
-        repeat(3) { pause(s.runId); resume(s.runId) }
+        repeat(3) {
+            pause(s.runId)
+            resume(s.runId)
+        }
 
         val jejak = jdbc.sql("SELECT count(*) FROM audit_event WHERE event_type = 'pause_excessive'")
             .query(Int::class.java).single()
@@ -384,8 +392,12 @@ class GameFlowTest {
         assertTrue(habis.body!!.contains("\"code\":\"CONFLICT\""), "body: ${habis.body}")
         assertTrue(start().awaitingLife, "tetap menunggu nyawa — tak ada nyawa hantu")
         assertEquals(0, wallet().free + wallet().paid)
-        assertEquals(2, jdbc.sql("SELECT lives_used FROM run WHERE id = ?").param(s.runId.toLong())
-            .query(Int::class.java).single(), "tie-breaker ADR-0009 menghitung nyawa walau level belum tuntas")
+        assertEquals(
+            2,
+            jdbc.sql("SELECT lives_used FROM run WHERE id = ?").param(s.runId.toLong())
+                .query(Int::class.java).single(),
+            "tie-breaker ADR-0009 menghitung nyawa walau level belum tuntas",
+        )
     }
 
     @Test
@@ -417,8 +429,11 @@ class GameFlowTest {
             .param(s.runId.toLong()).query().singleRow()
         assertEquals(1, row["lives_used"])
         assertEquals(0, row["score"], "livesUsed >= lifeCap → penalti nol (ADR-0017)")
-        assertEquals(1, jdbc.sql("SELECT lives_used FROM run WHERE id = ?").param(s.runId.toLong())
-            .query(Int::class.java).single())
+        assertEquals(
+            1,
+            jdbc.sql("SELECT lives_used FROM run WHERE id = ?").param(s.runId.toLong())
+                .query(Int::class.java).single(),
+        )
     }
 
     @Test

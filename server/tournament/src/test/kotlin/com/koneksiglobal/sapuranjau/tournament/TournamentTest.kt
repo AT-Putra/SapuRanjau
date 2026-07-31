@@ -57,8 +57,11 @@ class TournamentTest {
     private var port: Int = 0
 
     @Autowired private lateinit var jdbc: JdbcClient
+
     @Autowired private lateinit var periods: PeriodService
+
     @Autowired private lateinit var winners: WinnerService
+
     @Autowired private lateinit var pii: PiiCipher
 
     @BeforeEach
@@ -264,7 +267,10 @@ class TournamentTest {
     fun `pemenang diambil sebanyak slot, urut tie-breaker nyawa saat skor seri`() {
         val p = periode("p", -10, 0, status = "ENDED")
         hadiah(p, 3)
-        val a = pemain("a"); val b = pemain("b"); val c = pemain("c"); val d = pemain("d")
+        val a = pemain("a")
+        val b = pemain("b")
+        val c = pemain("c")
+        val d = pemain("d")
         run(a, p, skor = 500)
         run(b, p, skor = 300, nyawa = 2) // skor seri dengan c → kalah karena nyawa lebih banyak
         run(c, p, skor = 300, nyawa = 0)
@@ -280,8 +286,10 @@ class TournamentTest {
         val sebelum = periode("sebelum", -20, -10, status = "ENDED")
         val p = periode("p", -10, 0, status = "ENDED")
         hadiah(p, 3)
-        val juaraLama = pemain("juara-lama"); val kenaBan = pemain("kena-ban")
-        val terkunci = pemain("terkunci"); val bersih = pemain("bersih")
+        val juaraLama = pemain("juara-lama")
+        val kenaBan = pemain("kena-ban")
+        val terkunci = pemain("terkunci")
+        val bersih = pemain("bersih")
 
         jdbc.sql("INSERT INTO winner (period_id, user_id, rank) VALUES (?, ?, 1)").params(sebelum, juaraLama).update()
         jdbc.sql("INSERT INTO tournament_ban (user_id, reason, period_start_id) VALUES (?, 'refund', ?)")
@@ -314,8 +322,14 @@ class TournamentTest {
     fun `gugurkan pemenang - yang di bawah naik satu tingkat, kandidat berikutnya masuk`() {
         val p = periode("p", -10, 0, status = "ENDED")
         hadiah(p, 3) // min 3 slot (ADR-0021)
-        val a = pemain("a"); val b = pemain("b"); val c = pemain("c"); val d = pemain("d")
-        run(a, p, skor = 400); run(b, p, skor = 300); run(c, p, skor = 200); run(d, p, skor = 100)
+        val a = pemain("a")
+        val b = pemain("b")
+        val c = pemain("c")
+        val d = pemain("d")
+        run(a, p, skor = 400)
+        run(b, p, skor = 300)
+        run(c, p, skor = 200)
+        run(d, p, skor = 100)
         winners.finalizePeriod(p)
         val winnerB = jdbc.sql("SELECT id FROM winner WHERE period_id = ? AND user_id = ?")
             .params(p, b).query(Long::class.java).single()
