@@ -163,6 +163,9 @@ data class LeaderboardEntry(
     val totalTimeMs: Long = 0,
     val totalMoves: Int = 0,
     val me: Boolean = false,
+    // Sedang menjalani jeda hadiah (ADR-0027/0046): tetap bermain & tampil, tapi daftar penerima
+    // hadiah melewatinya. Default false = APK ini tetap hidup bila server belum mengirimnya.
+    val onCooldown: Boolean = false,
 )
 
 @Serializable
@@ -171,6 +174,8 @@ data class Leaderboard(
     val page: Int = 0,
     val size: Int = 0,
     val entries: List<LeaderboardEntry> = emptyList(),
+    // Baris pemain sendiri berapa pun halaman yang dibuka (ADR-0046); null = belum punya run.
+    val myEntry: LeaderboardEntry? = null,
 )
 
 @Serializable

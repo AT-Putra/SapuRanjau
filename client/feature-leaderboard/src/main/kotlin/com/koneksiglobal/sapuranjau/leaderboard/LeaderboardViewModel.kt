@@ -19,6 +19,8 @@ data class PeringkatUi(
     /** Tak ada periode berjalan (ADR-0021) — leaderboard memang tak punya isi, bukan gagal. */
     val terkunci: Boolean = false,
     val entries: List<LeaderboardEntry> = emptyList(),
+    // Baris pemain sendiri berapa pun halaman yang dibuka (ADR-0046); null = belum punya run.
+    val myEntry: LeaderboardEntry? = null,
     val halaman: Int = 0,
     val adaHalamanLagi: Boolean = false,
     val pesanMasuk: List<MessageItem> = emptyList(),
@@ -48,12 +50,15 @@ class LeaderboardViewModel(private val api: SapuRanjauApi = devApi()) : ViewMode
                 memuat = false,
                 terkunci = false,
                 entries = papan.entries,
+                myEntry = papan.myEntry,
                 halaman = papan.page,
                 // Server tak mengirim total baris; halaman penuh = pertanda masih ada lanjutannya.
                 adaHalamanLagi = papan.entries.size >= papan.size && papan.size > 0,
                 pesanMasuk = inbox.messages,
                 belumDibaca = inbox.unread,
-                namaTampilan = papan.entries.firstOrNull { e -> e.me }?.name ?: it.namaTampilan,
+                // `myEntry` lebih dulu: ia ADA di halaman berapa pun, sedangkan baris ber-`me`
+                // hanya muncul saat pemain kebetulan berada di halaman yang dibuka.
+                namaTampilan = papan.myEntry?.name ?: papan.entries.firstOrNull { e -> e.me }?.name ?: it.namaTampilan,
             )
         }
     }
@@ -87,7 +92,7 @@ class LeaderboardViewModel(private val api: SapuRanjauApi = devApi()) : ViewMode
             } catch (e: ApiException) {
                 // LOCKED bukan error yang perlu tombol "coba lagi": tak ada periode berjalan, titik.
                 if (e.code == ApiErrorCode.LOCKED) {
-                    _state.update { it.copy(memuat = false, terkunci = true, entries = emptyList()) }
+                    _state.update { it.copy(memuat = false, terkunci = true, entries = emptyList(), myEntry = null) }
                 } else {
                     _state.update { it.copy(memuat = false, catatan = e.detail) }
                 }

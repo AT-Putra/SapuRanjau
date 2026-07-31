@@ -19,6 +19,8 @@ import java.time.Instant
 import java.time.temporal.ChronoUnit
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -394,6 +396,44 @@ class TournamentTest {
 
         val h2 = leaderboard("?page=1&size=2")
         assertEquals(listOf(3), h2.entries.map { it.rank })
+    }
+
+    // ADR-0046 — dua utang T-034 yang akhirnya dibayar.
+    @Test
+    fun `leaderboard menandai jeda hadiah di baris orangnya dan mengirim peringkat sendiri`() {
+        // Menang di periode lalu → jeda hadiah 3 periode berikutnya (ADR-0027).
+        val juara = juaraDenganHadiah("pemain-2")
+        val p = periode("p2", 0, 7, status = "ACTIVE")
+        val aku = pemain("pemain-1")
+        run(juara, p, skor = 900)
+        run(pemain("orang-3"), p, skor = 700)
+        run(aku, p, skor = 100)
+
+        val h1 = leaderboard("?page=0&size=2")
+        // Badge menempel di baris ORANGNYA, bukan jadi catatan kaki yang paling mungkin terlewat
+        // oleh yang berkepentingan. Ekspresinya sama dengan yang dipakai memilih pemenang.
+        assertTrue(h1.entries[0].onCooldown, "juara periode lalu sedang jeda hadiah")
+        assertFalse(h1.entries[1].onCooldown)
+
+        // Pemain di luar halaman 1 tetap tahu peringkatnya — tanpa membolak-balik halaman.
+        assertTrue(h1.entries.none { it.me }, "baris sendiri memang tak ada di halaman ini")
+        val milikku = assertNotNull(h1.myEntry)
+        assertEquals(3, milikku.rank)
+        assertEquals(100L, milikku.totalScore)
+        assertTrue(milikku.me)
+        assertFalse(milikku.onCooldown)
+
+        // Peringkatnya dihitung dengan urutan yang SAMA dengan daftarnya — halaman yang memuat
+        // baris itu harus menyebut angka yang sama.
+        assertEquals(milikku.rank, leaderboard("?page=1&size=2").entries.single { it.me }.rank)
+    }
+
+    @Test
+    fun `peringkat sendiri null saat pemain belum punya run di periode itu`() {
+        val p = periode("p", 0, 7, status = "ACTIVE")
+        run(pemain("orang-lain"), p, skor = 500)
+
+        assertNull(leaderboard().myEntry)
     }
 
     @Test

@@ -58,10 +58,15 @@ class TournamentController(
         val offset = page * size
         // Urutan = index `run_leaderboard` (`08` §2.4) supaya tetap index scan tanpa sort. Join ke
         // app_user hanya untuk baris halaman ini (≤ 50), bukan untuk seluruh peserta.
+        // Ekspresi cooldown-nya DIPAKAI ULANG dari `PeriodWindows` — file yang sama dengan yang
+        // dipakai memilih pemenang. Badge di layar dan daftar penerima hadiah karena itu tak bisa
+        // berbeda pendapat (ADR-0046).
+        val cooldown = onWinnerCooldownSql("r.user_id", ":pid")
         val rows = jdbc.sql(
             """
             SELECT r.user_id, coalesce(u.display_name, 'Pemain #' || r.user_id) AS name,
-                   r.total_score, r.lives_used, r.total_time_ms, r.total_moves
+                   r.total_score, r.lives_used, r.total_time_ms, r.total_moves,
+                   $cooldown AS on_cooldown
               FROM run r JOIN app_user u ON u.id = r.user_id
              WHERE r.period_id = :pid
              ORDER BY r.total_score DESC, r.lives_used, r.total_time_ms, r.total_moves, r.completed_all_at
@@ -77,11 +82,51 @@ class TournamentController(
                     totalTimeMs = rs.getLong("total_time_ms"),
                     totalMoves = rs.getInt("total_moves"),
                     me = rs.getLong("user_id") == me,
+                    onCooldown = rs.getBoolean("on_cooldown"),
                 )
             }.list()
 
-        return LeaderboardResponse(periodId.toString(), page, size, rows)
+        return LeaderboardResponse(periodId.toString(), page, size, rows, myEntry(periodId, me))
     }
+
+    // Baris pemain sendiri, berapa pun halaman yang sedang dibuka (ADR-0046).
+    //
+    // `row_number()`, BUKAN `rank()`: peringkat di daftar dihitung sebagai posisi baris
+    // (`offset + i + 1`), jadi memakai `rank()` di sini akan membuat dua angka untuk pemain yang
+    // sama begitu ada dua run yang seri di SELURUH tie-breaker. Urutannya disalin persis dari
+    // query daftar — kalau salah satunya berubah, keduanya harus berubah.
+    //
+    // ponytail: window function memindai baris periode berjalan. Benar & sederhana untuk ukuran
+    // sekarang; kalau peserta sudah puluhan ribu DAN layar ini terasa lambat, obatnya menyimpan
+    // peringkat hasil hitung berkala — bukan mengoptimalkan SQL ini lebih dulu.
+    private fun myEntry(periodId: Long, userId: Long): LeaderboardEntry? =
+        jdbc.sql(
+            """
+            WITH peringkat AS (
+              SELECT r.user_id, r.total_score, r.lives_used, r.total_time_ms, r.total_moves,
+                     row_number() OVER (
+                       ORDER BY r.total_score DESC, r.lives_used, r.total_time_ms, r.total_moves, r.completed_all_at
+                     ) AS posisi
+                FROM run r WHERE r.period_id = :pid
+            )
+            SELECT p.posisi, p.total_score, p.lives_used, p.total_time_ms, p.total_moves,
+                   coalesce(u.display_name, 'Pemain #' || p.user_id) AS name,
+                   ${onWinnerCooldownSql("p.user_id", ":pid")} AS on_cooldown
+              FROM peringkat p JOIN app_user u ON u.id = p.user_id
+             WHERE p.user_id = :uid
+            """,
+        ).param("pid", periodId).param("uid", userId).query { rs, _ ->
+            LeaderboardEntry(
+                rank = rs.getInt("posisi"),
+                name = rs.getString("name"),
+                totalScore = rs.getLong("total_score"),
+                livesUsed = rs.getInt("lives_used"),
+                totalTimeMs = rs.getLong("total_time_ms"),
+                totalMoves = rs.getInt("total_moves"),
+                me = true,
+                onCooldown = rs.getBoolean("on_cooldown"),
+            )
+        }.optional().orElse(null)
 
     // PUT /v1/profile/display-name — nama tampilan leaderboard (ADR-0039). Server tak mengambil nama
     // dari claim Firebase: pemain yang menentukan, klien boleh mengisi awalnya dari akun Google.
@@ -124,6 +169,10 @@ data class LeaderboardResponse(
     val page: Int,
     val size: Int,
     val entries: List<LeaderboardEntry>,
+    // Baris pemain sendiri, LENGKAP — bukan sekadar angka peringkat (ADR-0046): layar menempelkannya
+    // di bawah daftar, dan angka telanjang tak cukup untuk merender baris itu. `null` = pemain belum
+    // punya run di periode ini.
+    val myEntry: LeaderboardEntry? = null,
 )
 
 // Tanpa id pemain: peringkat + nama sudah cukup untuk dirender, dan id internal tak perlu bocor.
@@ -137,6 +186,11 @@ data class LeaderboardEntry(
     // Dinamai `me`, bukan `isMe`: awalan `is` membuat Jackson menerbitkan field `me` saat menulis
     // tapi menuntut `isMe` saat membaca — bentuk wire yang tak simetris.
     val me: Boolean,
+    // Sedang menjalani jeda hadiah (ADR-0027): tetap bermain & tetap tampil, tapi daftar penerima
+    // hadiah melewatinya. Sengaja SEMPIT — bukan `prizeEligible`, yang punya masukan lebih banyak
+    // (ban, skor terkunci, skor > 0) dan berarti menulis aturan `WinnerService.eligible` untuk
+    // kedua kalinya di tempat yang suatu hari akan berbeda pendapat. Lihat ADR-0046.
+    val onCooldown: Boolean = false,
 )
 
 data class DisplayNameRequest(val displayName: String)

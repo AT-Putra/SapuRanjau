@@ -100,6 +100,18 @@ fun LeaderboardScreen(vm: LeaderboardViewModel = viewModel()) {
                         }
                     }
 
+                    // Peringkat sendiri menempel di bawah daftar (ADR-0046) — ditampilkan HANYA saat
+                    // barisnya tak ada di halaman yang sedang dibuka; kalau ada, menampilkannya dua
+                    // kali cuma membuat pemain mengira ia punya dua peringkat.
+                    ui.myEntry?.takeIf { milikku -> ui.entries.none { it.me } }?.let { milikku ->
+                        Text(
+                            "Peringkat kamu",
+                            style = MaterialTheme.typography.titleSmall,
+                            modifier = Modifier.padding(top = Space.s2),
+                        )
+                        Baris(milikku)
+                    }
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -115,6 +127,8 @@ fun LeaderboardScreen(vm: LeaderboardViewModel = viewModel()) {
                     // server yang menjawab, dan 409-nya adalah jawaban yang sah, bukan kegagalan.
                     TextButton(onClick = { formKlaim = true }) { Text("Klaim hadiah (khusus pemenang)") }
 
+                    // Aturannya kini juga tampil per-baris ("sedang jeda hadiah"), tapi catatan ini
+                    // tetap ada: badge menjelaskan APA, kalimat ini menjelaskan KENAPA.
                     Text(
                         "Pemenang sebuah periode dilewati dari daftar pemenang 3 periode berikutnya, tapi tetap " +
                             "bermain dan tetap tampil di peringkat.",
@@ -155,7 +169,19 @@ private fun Baris(entry: LeaderboardEntry) {
             .padding(Space.s2),
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Text("${entry.rank}. ${entry.name}" + if (entry.me) " (kamu)" else "", style = MaterialTheme.typography.bodyLarge)
+        Column {
+            Text("${entry.rank}. ${entry.name}" + if (entry.me) " (kamu)" else "", style = MaterialTheme.typography.bodyLarge)
+            // Jeda hadiah (ADR-0027) ditulis sebagai TEKS di barisnya, bukan sekadar warna atau ikon
+            // (`03` §5) — dan di baris orangnya sendiri, bukan sebagai catatan di kaki layar yang
+            // justru paling mungkin terlewat oleh yang berkepentingan.
+            if (entry.onCooldown) {
+                Text(
+                    "sedang jeda hadiah",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
         Text("${entry.totalScore}", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
     }
 }
