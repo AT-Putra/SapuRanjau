@@ -21,9 +21,12 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
 // memilih LAYAR dari kode ini — popup S&K, pesan ban, atau state "turnamen terkunci" (05 §3).
 // INTEGRITY_REQUIRED (perlu attest dulu, klien tinggal memanggil POST /v1/integrity lalu mengulang)
 // sengaja dibedakan dari INTEGRITY_FAILED (perangkat/APK ditolak Google — mengulang tak menolong).
+// BAD_CREDENTIALS/TOTP_REQUIRED/TOO_MANY_ATTEMPTS/FORBIDDEN dipakai panel admin (T-040): SPA-nya
+// memilih layar dari kode ini — form password, kotak kode authenticator, atau pesan "coba lagi nanti".
 enum class ErrorCode {
     UNAUTHENTICATED, VALIDATION, NOT_FOUND, CONFLICT, INTERNAL,
     LOCKED, BANNED, CONSENT_REQUIRED, INTEGRITY_REQUIRED, INTEGRITY_FAILED,
+    BAD_CREDENTIALS, TOTP_REQUIRED, TOO_MANY_ATTEMPTS, FORBIDDEN,
 }
 
 // Dilempar controller/service utk error terkendali → dipetakan ke ProblemDetail oleh advice.

@@ -6,6 +6,7 @@ import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.postgresql.PostgreSQLContainer
 import org.testcontainers.junit.jupiter.Testcontainers
 import org.testcontainers.utility.DockerImageName
+import java.io.File
 import java.sql.DriverManager
 import java.sql.SQLException
 import kotlin.test.assertEquals
@@ -28,13 +29,16 @@ class FlywayMigrationTest {
             .dataSource(postgres.jdbcUrl, postgres.username, postgres.password)
             .load()
 
-    // 15 entitas (V1..V15) + V16 progres level berjalan di `board` (ADR-0036, T-022)
-    // + V17 jendela ban terbuka (ADR-0038, T-025) + V18 nama tampilan (ADR-0039, T-026)
-    // + V19 cache verdict Play Integrity (ADR-0041, T-028).
+    // Jumlahnya DIHITUNG dari file, bukan ditulis tangan. Versi sebelumnya memakai konstanta (19) dan
+    // konstanta itu tak ikut naik saat V20 lahir (T-036) — test ini merah tanpa ada yang salah dengan
+    // migrasinya. Yang benar-benar diuji di sini adalah "semua migrasi yang ada jalan bersih di
+    // Postgres sungguhan", dan itu tak butuh angka yang harus diingat manusia.
     @Test
     fun migratesAllVersionsCleanly() {
+        val berkas = File(javaClass.classLoader.getResource("db/migration")!!.toURI())
+            .listFiles { f -> f.name.endsWith(".sql") }!!.size
         val result = flyway().migrate()
-        assertEquals(19, result.migrationsExecuted)
+        assertEquals(berkas, result.migrationsExecuted)
     }
 
     @Test

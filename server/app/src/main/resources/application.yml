@@ -12,6 +12,18 @@ spring:
     enabled: true # migrasi V1..V16 dari server/persistence (ADR-0020)
 server:
   port: 8080
+  servlet:
+    session:
+      # Sesi panel admin (T-040, ADR-0013). `SameSite=Lax` = lapis pertama anti-CSRF: cookie tak ikut
+      # pada POST lintas-situs sama sekali (lapis kedua = header X-Requested-With di AdminSessionFilter).
+      # `secure` menyusul HTTPS di prod lewat env COOKIE_SECURE=true — dipaksa true di dev akan membuat
+      # panel mustahil dibuka lewat http://localhost.
+      timeout: 8h
+      cookie:
+        name: SAPURANJAU_ADMIN
+        http-only: true
+        same-site: lax
+        secure: ${COOKIE_SECURE:false}
 sapuranjau:
   scoring:
     # parTimeMs = parMoves × konstanta ini (05 §2, ADR-0017 tunable). Kalibrasi playtest → admin-config.

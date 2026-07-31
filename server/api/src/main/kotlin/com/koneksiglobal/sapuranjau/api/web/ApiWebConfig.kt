@@ -29,7 +29,17 @@ class ApiWebConfig(
         // terlindungi BearerAuthFilter yang menjaga `/v1/*`. Default AMAN: modul baru (game, lives, …)
         // tak bisa lupa mendaftar dan diam-diam terbit tanpa auth. Controller di paket base itu
         // sendiri (server/app: `/health`) TIDAK ter-prefix — memang publik.
-        configurer.addPathPrefix("/v1") { it.packageName != BASE_PACKAGE && it.packageName.startsWith("$BASE_PACKAGE.") }
+        //
+        // Pengecualian tunggal: paket `...admin` (T-040, ADR-0013). Panel admin memakai model auth
+        // yang berbeda — sesi cookie + CSRF, bukan Bearer Firebase — jadi ia mendapat prefix sendiri
+        // (`/admin/api`, AdminWebConfig) dan gerbangnya sendiri (AdminSessionFilter). Membiarkannya
+        // ikut `/v1` bukan cuma salah alamat: BearerAuthFilter akan menuntut ID token pemain untuk
+        // halaman login admin. Pengecualiannya di-hardcode di SINI supaya tetap satu daftar — modul
+        // baru mana pun tetap kena default aman.
+        configurer.addPathPrefix("/v1") {
+            it.packageName != BASE_PACKAGE && it.packageName.startsWith("$BASE_PACKAGE.") &&
+                it.packageName != ADMIN_PACKAGE && !it.packageName.startsWith("$ADMIN_PACKAGE.")
+        }
     }
 
     override fun addArgumentResolvers(resolvers: MutableList<HandlerMethodArgumentResolver>) {
@@ -42,6 +52,7 @@ class ApiWebConfig(
 
     private companion object {
         const val BASE_PACKAGE = "com.koneksiglobal.sapuranjau"
+        const val ADMIN_PACKAGE = "$BASE_PACKAGE.admin"
     }
 }
 
