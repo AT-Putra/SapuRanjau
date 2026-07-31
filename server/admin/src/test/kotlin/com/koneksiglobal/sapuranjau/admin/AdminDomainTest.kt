@@ -506,6 +506,96 @@ class AdminDomainTest {
         assertEquals(1, daftar(cari.body).size)
     }
 
+    // ── Penghapusan akun (ADR-0044) ─────────────────────────────────────────────────────────────
+
+    @Test
+    fun `hapus akun mengaburkan identitas tapi menyisakan yang menopang orang lain`() {
+        val cookie = sesi("bos")
+        val p = periode("P", 1, 5, "ACTIVE")
+        val u = jdbc.sql("INSERT INTO app_user (firebase_uid, display_name, email) VALUES (?, ?, ?) RETURNING id")
+            .params("uid-1", "Adita", "adita@contoh.test").query(Long::class.java).single()
+        run(u, p, 500)
+        beli(u, "life_m", 5, "granted", 0)
+        val w = pemenang(p, u, 1)
+        jdbc.sql("INSERT INTO prize_claim (winner_id, phone_enc, prize_value, status) VALUES (?, ?, 1500000.00, 'paid')")
+            .params(w, pii.encrypt("081234567890")).update()
+        jdbc.sql("INSERT INTO message (user_id, admin_id, body) VALUES (?, 1, 'Selamat')").param(u).update()
+
+        assertEquals(403, post("/admin/api/players/$u/delete", mapOf("reason" to "x"), sesi("mod", AdminRole.MODERATOR)).status)
+        // Alasan/rujukan permintaan wajib: itu yang membuktikan penghapusan memang diminta pemiliknya.
+        assertEquals(400, post("/admin/api/players/$u/delete", mapOf("reason" to " "), cookie).status)
+
+        val hapus = post("/admin/api/players/$u/delete", mapOf("reason" to "Permintaan pemain, tiket #12"), cookie)
+        assertEquals(200, hapus.status, hapus.body)
+
+        // Identitas hilang…
+        val akun = jdbc.sql("SELECT firebase_uid, email, display_name, deleted_at FROM app_user WHERE id = ?").param(u)
+            .query { rs, _ -> listOf(rs.getString("firebase_uid"), rs.getString("email"), rs.getString("display_name"), rs.getTimestamp("deleted_at")) }
+            .single()
+        assertTrue((akun[0] as String).startsWith("deleted:"))
+        assertNull(akun[1])
+        assertNull(akun[2])
+        assertNotNull(akun[3])
+
+        // …PII klaim hilang, jejak pembukuannya tinggal…
+        val klaim = jdbc.sql("SELECT phone_enc, ewallet_enc, address_enc, prize_value, status FROM prize_claim WHERE winner_id = ?")
+            .param(w).query { rs, _ -> listOf(rs.getBytes("phone_enc"), rs.getBytes("ewallet_enc"), rs.getBytes("address_enc"), rs.getBigDecimal("prize_value"), rs.getString("status")) }
+            .single()
+        assertNull(klaim[0])
+        assertNull(klaim[1])
+        assertNull(klaim[2])
+        assertNotNull(klaim[3])
+        assertEquals("paid", klaim[4])
+
+        // …kotak masuk hilang…
+        assertEquals(0L, jdbc.sql("SELECT count(*) FROM message WHERE user_id = ?").param(u).query(Long::class.java).single())
+
+        // …tetapi yang menopang orang lain TETAP: peringkat periode lampau, daftar pemenang
+        // (peringkat & cooldown peserta lain bergantung padanya), dan pembukuan pembelian.
+        assertEquals(1L, jdbc.sql("SELECT count(*) FROM run WHERE user_id = ?").param(u).query(Long::class.java).single())
+        assertEquals(1L, jdbc.sql("SELECT count(*) FROM winner WHERE user_id = ?").param(u).query(Long::class.java).single())
+        assertEquals(1L, jdbc.sql("SELECT count(*) FROM purchase WHERE user_id = ?").param(u).query(Long::class.java).single())
+
+        // Jejaknya menyebut rujukan permintaan, TAK PERNAH data yang barusan dihapus — audit_event
+        // tak bisa dihapus siapa pun (T-027), jadi menyalin PII ke sana membatalkan penghapusannya.
+        val detail = jdbc.sql("SELECT detail::text FROM audit_event WHERE event_type = 'account_deleted'")
+            .query(String::class.java).single()
+        assertTrue(detail.contains("tiket #12"))
+        assertFalse(detail.contains("081234567890"))
+        assertFalse(detail.contains("adita@contoh.test"))
+
+        // Idempotensi: penghapusan kedua ditolak, bukan menimpa apa pun.
+        assertEquals(409, post("/admin/api/players/$u/delete", mapOf("reason" to "lagi"), cookie).status)
+    }
+
+    @Test
+    fun `hapus akun ditunda selama sanksi berjalan dan selama klaim hadiah belum lunas`() {
+        val cookie = sesi("bos")
+        val p = periode("P", 1, 5, "ACTIVE")
+        val u = pemain("uid-1", "Adita")
+        val ban = jdbc.sql("INSERT INTO tournament_ban (user_id, reason, period_start_id) VALUES (?, 'refund', ?) RETURNING id")
+            .params(u, p).query(Long::class.java).single()
+
+        // Tanpa pagar ini, hapus-akun = jalan keluar dari ban 3 periode (ADR-0025): masuk lagi
+        // dengan akun Google yang sama menghasilkan firebase_uid baru dan catatan bersih.
+        val ditolak = post("/admin/api/players/$u/delete", mapOf("reason" to "permintaan pemain"), cookie)
+        assertEquals(409, ditolak.status)
+        assertTrue(ditolak.body!!.contains("sanksi"))
+
+        post("/admin/api/bans/$ban/forgive", mapOf("reason" to "salah tagih"), cookie)
+
+        // Pagar kedua: hadiah tak bisa dikirim ke akun yang tak lagi menunjuk siapa pun.
+        val w = pemenang(p, u, 1)
+        jdbc.sql("INSERT INTO prize_claim (winner_id, phone_enc, status) VALUES (?, ?, 'pending')")
+            .params(w, pii.encrypt("08123")).update()
+        val ditolak2 = post("/admin/api/players/$u/delete", mapOf("reason" to "permintaan pemain"), cookie)
+        assertEquals(409, ditolak2.status)
+        assertTrue(ditolak2.body!!.contains("lunas"))
+
+        jdbc.sql("UPDATE prize_claim SET status = 'paid' WHERE winner_id = ?").param(w).update()
+        assertEquals(200, post("/admin/api/players/$u/delete", mapOf("reason" to "permintaan pemain"), cookie).status)
+    }
+
     // ── Reset 2FA ───────────────────────────────────────────────────────────────────────────────
 
     @Test

@@ -163,6 +163,7 @@ class AdminReportController(
         val casualClaims: Long,
         val activeBan: Boolean, // ban turnamen yang belum diampuni (ADR-0025)
         val lastActivityAt: Instant?,
+        val deletedAt: Instant?, // akun yang sudah dianonimkan (ADR-0044) — barisnya tetap ada
     )
 
     @GetMapping("/players")
@@ -195,7 +196,7 @@ class AdminReportController(
         // mengoptimalkan SQL ini lebih dulu.
         val isi = jdbc.sql(
             """
-            SELECT u.id, u.display_name, u.status, u.created_at,
+            SELECT u.id, u.display_name, u.status, u.created_at, u.deleted_at,
                    (SELECT count(*) FROM run r WHERE r.user_id = u.id) AS runs,
                    (SELECT coalesce(max(r.total_score), 0) FROM run r WHERE r.user_id = u.id) AS best_score,
                    (SELECT count(*) FROM life_ledger l WHERE l.user_id = u.id AND l.status = 'available') AS lives_available,
@@ -223,6 +224,7 @@ class AdminReportController(
                 rs.getLong("casual_claims"),
                 rs.getBoolean("active_ban"),
                 rs.getTimestamp("last_activity_at")?.toInstant(),
+                rs.getTimestamp("deleted_at")?.toInstant(),
             )
         }.list()
 

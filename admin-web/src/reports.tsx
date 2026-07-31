@@ -13,7 +13,10 @@ import {
   TextField,
   TextInput,
   useListContext,
+  usePermissions,
+  useRecordContext,
 } from 'react-admin';
+import { AksiDialog } from './actions';
 import { call } from './api';
 
 // Laporan penjualan & pemain (T-042 lanjutan) — alasan panel ini berbentuk SPA (ADR-0013).
@@ -223,6 +226,26 @@ export const SalesReport = () => (
   </List>
 );
 
+// "Hapus akun" = ANONIMISASI (ADR-0044), bukan DELETE: baris pemain menopang peringkat & cooldown
+// peserta lain, pembukuan, dan jejak audit yang justru tak boleh hilang. Server menolak selama
+// sanksi masih berjalan atau klaim hadiah belum lunas — pagar itu tak diulang di sini, cukup
+// pesannya yang ditampilkan apa adanya.
+const HapusAkun = () => {
+  const { permissions } = usePermissions();
+  const record = useRecordContext();
+  if (!record || permissions !== 'admin') return null;
+  return (
+    <AksiDialog
+      label="Hapus akun"
+      judul="Hapus akun pemain ini?"
+      keterangan="Nama, email, dan data klaim hadiahnya dihapus; kotak pesannya dihapus. Skor, pembelian, dan jejak audit TETAP tersimpan tanpa lagi menunjuk siapa pun — itu milik peringkat pemain lain dan bukti bila ada sanksi yang dibantah. Tak bisa dibatalkan."
+      path={(id) => `/players/${id}/delete`}
+      field="reason"
+      disabled={!!record.deletedAt}
+    />
+  );
+};
+
 const filterPemain = [
   <TextInput key="q" source="q" label="Cari nama" alwaysOn />,
   <BooleanInput key="b" source="banned" label="Sedang kena ban" alwaysOn />,
@@ -244,6 +267,8 @@ export const PlayerReport = () => (
         sortable={false}
         render={(r: { lastActivityAt?: string }) => (r.lastActivityAt ? new Date(r.lastActivityAt).toLocaleString('id-ID') : '—')}
       />
+      <FunctionField label="Akun" sortable={false} render={(r: { deletedAt?: string }) => (r.deletedAt ? 'dihapus' : 'aktif')} />
+      <HapusAkun />
     </Datagrid>
   </List>
 );
