@@ -32,6 +32,12 @@ credentials*.json
 id_rsa
 id_ed25519
 
+# --- Node / admin-web (ADR-0013) ---
+# `package-lock.json` justru WAJIB di-track: `npm ci` menolak jalan tanpanya, dan itu satu-satunya
+# hal yang membuat build hari ini memasang paket yang sama dengan build kemarin.
+node_modules/
+admin-web/dist/
+
 # --- Output tooling lokal ---
 graphify-out/
 .mcp.json

@@ -54,6 +54,9 @@ include(":client:feature-casual")
 include(":client:feature-tournament")
 include(":client:feature-wallet")
 include(":client:feature-leaderboard")
+// admin-web/ — SPA React-Admin (ADR-0013). SENGAJA tak di-include: isinya npm/Vite, tak ada kelas
+// JVM. Ia di-build oleh task Exec di `server/app` dan hasilnya masuk ke sana sebagai static
+// resource `/admin` (T-041).
 //
 // Ditambah per-task saat diklaim (docs/04_TASKS.md) — tiap penambahan = 1 baris + 1 build.gradle.kts 3-baris:
 //   shared:  contracts

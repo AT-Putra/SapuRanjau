@@ -17,6 +17,7 @@ import org.springframework.web.filter.OncePerRequestFilter
 import org.springframework.web.method.support.HandlerMethodArgumentResolver
 import org.springframework.web.method.support.ModelAndViewContainer
 import org.springframework.web.servlet.config.annotation.PathMatchConfigurer
+import org.springframework.web.servlet.config.annotation.ViewControllerRegistry
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer
 import tools.jackson.databind.ObjectMapper // Jackson 3 — mapper default Spring Boot 4
 import java.io.Serializable
@@ -95,6 +96,19 @@ class AdminWebConfig(private val mapper: ObjectMapper) : WebMvcConfigurer {
 
     override fun addArgumentResolvers(resolvers: MutableList<HandlerMethodArgumentResolver>) {
         resolvers.add(AdminPrincipalResolver())
+    }
+
+    // SPA-nya duduk sebagai static resource `static/admin/index.html` (T-041). Spring hanya
+    // menyajikan index.html secara otomatis untuk root ("/"), jadi tanpa dua baris ini `/admin`
+    // membalas 404 padahal panelnya ADA di dalam jar — dan itu tak terlihat dari test mana pun
+    // sampai ada manusia yang mengetik alamatnya di browser.
+    //
+    // Cukup dua alamat karena panel memakai hash router: setiap layar adalah `/admin/#/...`, yang
+    // tetap satu permintaan HTTP untuk `/admin/`. Deep-link tak pernah menyentuh server.
+    override fun addViewControllers(registry: ViewControllerRegistry) {
+        listOf("/admin", "/admin/").forEach {
+            registry.addViewController(it).setViewName("forward:/admin/index.html")
+        }
     }
 
     @Bean

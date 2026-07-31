@@ -1,0 +1,28 @@
+{
+  "name": "admin-web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@mui/material": "9.2.0",
+    "ra-data-simple-rest": "5.15.0",
+    "react": "19.2.8",
+    "react-admin": "5.15.1",
+    "react-dom": "19.2.8",
+    "react-router-dom": "7.18.2"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4",
+    "@vitejs/plugin-react": "6.0.5",
+    "typescript": "7.0.2",
+    "vite": "8.2.0"
+  },
+  "engines": {
+    "node": "^20.19 || >=22.12"
+  }
+}

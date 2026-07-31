@@ -318,6 +318,18 @@ class AdminAuthTest {
     }
 
     @Test
+    fun `alamat panel menyajikan SPA-nya`() {
+        // Spring hanya menyajikan index.html otomatis untuk root, jadi `/admin` sempat 404 padahal
+        // berkasnya ada di dalam jar — ketahuan waktu dibuka di browser, bukan dari test mana pun.
+        // (index.html di test-resources = pengganti hasil build Vite yang tinggal di `server/app`.)
+        listOf("/admin", "/admin/", "/admin/index.html").forEach { path ->
+            val res = get(path)
+            assertEquals(200, res.status, "GET $path")
+            assertTrue(res.body!!.contains("panel-admin-placeholder"), "GET $path bukan index.html panel")
+        }
+    }
+
+    @Test
     fun `endpoint admin tak pernah terbit di bawah v1`() {
         // Kalau prefix `/v1` ikut menyapu paket admin (ApiWebConfig), URL ini akan menjawab 200/403
         // alih-alih 404 — dan halaman login admin akan menuntut ID token Firebase milik pemain.
