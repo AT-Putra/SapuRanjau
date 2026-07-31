@@ -61,6 +61,13 @@ class CasualClaimTest {
     @BeforeEach
     fun seedPeriode() {
         jdbc.sql("TRUNCATE audit_event, life_ledger, app_user, period RESTART IDENTITY CASCADE").update()
+        // `casual_earn_config` TIDAK di-truncate (barisnya disisipkan migrasi V24 dan `CHECK (id=1)`
+        // membuatnya tunggal) — tapi harus dikembalikan ke nilai awal: ada test yang mengubahnya,
+        // dan urutan test tak dijamin, jadi tanpa baris ini kegagalannya akan bergantung urutan.
+        jdbc.sql(
+            "UPDATE casual_earn_config SET reward_lives = 1, cap_daily = 1, cap_weekly = 5, " +
+                "cap_monthly = 10, min_mines = 40, min_density = 0.150 WHERE id = 1",
+        ).update()
         jdbc.sql(
             "INSERT INTO period (name, starts_at, ends_at, status) " +
                 "VALUES ('test', now(), now() + interval '30 days', 'ACTIVE')",
@@ -152,6 +159,26 @@ class CasualClaimTest {
         assertEquals(ClaimResult.CAP_DAILY, kedua.result)
         assertEquals(3, kedua.free, "tak ada nyawa tambahan")
         assertEquals(1, nyawa("earn_casual"))
+    }
+
+    // Bukti bahwa angka ekonomi benar-benar dibaca dari `casual_earn_config` (ADR-0045) dan bukan
+    // lagi dari properti: ubah barisnya seperti yang dilakukan panel, lalu perilaku klaim ikut
+    // berubah tanpa restart apa pun.
+    @Test
+    fun `parameter earn dibaca dari tabel config, bukan properti`() {
+        assertEquals(ClaimResult.GRANTED, claim(permintaan()).result)
+        assertEquals(ClaimResult.CAP_DAILY, claim(permintaan(seed = 7)).result)
+
+        // Panel menaikkan cap harian & reward — persis UPDATE yang dikirim layar "Ekonomi nyawa".
+        jdbc.sql("UPDATE casual_earn_config SET cap_daily = 2, reward_lives = 2 WHERE id = 1").update()
+
+        assertEquals(ClaimResult.GRANTED, claim(permintaan(seed = 7)).result)
+        // 1 (klaim pertama, reward lama) + 2 (klaim kedua, reward baru) = 3 baris nyawa.
+        assertEquals(3, nyawa("earn_casual"))
+
+        // Ambang kesulitan juga dari tabel: dinaikkan di atas papan uji → klaim berikutnya ditolak.
+        jdbc.sql("UPDATE casual_earn_config SET cap_daily = 9, cap_weekly = 9, cap_monthly = 9, min_mines = 999 WHERE id = 1").update()
+        assertEquals(ClaimResult.BELOW_THRESHOLD, claim(permintaan(seed = 11)).result)
     }
 
     // Cap harian juga yang membuat klaim ulang payload yang sama tak menggandakan nyawa —

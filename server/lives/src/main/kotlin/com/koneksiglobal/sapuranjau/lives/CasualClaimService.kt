@@ -29,16 +29,13 @@ class CasualClaimService(
     private val jdbc: JdbcClient,
     private val audit: AuditService, // T-027: satu penulis audit_event utk seluruh server
     private val integrity: IntegrityGate, // T-028: gerbang device (ADR-0023/0041)
-    // Kebijakan earn (ADR-0023) — default = angka ADR, tunable, pindah ke admin-config saat panel
-    // ada (T-042), pola sama dengan `ms-per-par-move` (ADR-0036). **Lantai legal §9.5: jangan
-    // turunkan cap tanpa pertimbangan hukum — 1/5/10 sudah dekat lantai.**
-    @Value("\${sapuranjau.lives.casual.cap-daily:1}") private val capDaily: Int,
-    @Value("\${sapuranjau.lives.casual.cap-weekly:5}") private val capWeekly: Int,
-    @Value("\${sapuranjau.lives.casual.cap-monthly:10}") private val capMonthly: Int,
-    // Ambang "≥ medium" (ADR-0023). Default = intermediate klasik 16×16/40 (density 15,6%).
-    @Value("\${sapuranjau.lives.casual.min-mines:40}") private val minMines: Int,
-    @Value("\${sapuranjau.lives.casual.min-density:0.15}") private val minDensity: Double,
-    // Jendela cap = kalender waktu setempat, bukan UTC (ADR-0023 "jendela reset tetap").
+    // Kebijakan earn (ADR-0023) kini dibaca dari `casual_earn_config` — admin-config sungguhan
+    // (ADR-0045), bukan lagi properti. Propertinya DICABUT: dua sumber untuk angka yang sama adalah
+    // cara termurah membuat panel berbohong.
+    private val config: CasualEarnConfigRepo,
+    // Jendela cap = kalender waktu setempat, bukan UTC (ADR-0023 "jendela reset tetap"). SENGAJA
+    // tetap properti: mengubah zona menggeser jendela cap SEMUA pemain sekaligus — itu keputusan
+    // operasional yang ikut deploy, bukan tombol penyetelan ekonomi.
     @Value("\${sapuranjau.lives.casual.zone:Asia/Jakarta}") private val zone: String,
 ) {
     private val engine = MinesweeperEngine()
@@ -52,13 +49,17 @@ class CasualClaimService(
         integrity.require(userId)
         lives.lockUser(userId) // cek-cap lalu cetak harus atomik per pemain
 
-        if (!meetsThreshold(req)) return respond(userId, ClaimResult.BELOW_THRESHOLD)
-        capReached(lives.earnedCasualCounts(userId, zone))?.let { return respond(userId, it) }
+        // Dibaca sekali per klaim (satu baris, satu query): klaim itu jarang, dan cache berarti
+        // perubahan di panel baru berlaku "entah kapan" — persis yang membuat operator tak percaya
+        // pada layarnya sendiri.
+        val cfg = config.get()
+        if (!meetsThreshold(req, cfg)) return respond(userId, ClaimResult.BELOW_THRESHOLD)
+        capReached(lives.earnedCasualCounts(userId, zone), cfg)?.let { return respond(userId, it) }
 
         // Verifikasi (mahal: generate + solve) sengaja SETELAH cek murah — klaim yang sudah kena cap
         // tak layak membakar CPU.
         val v = verifyWin(req)
-        if (!lives.grantEarnedCasual(userId)) return respond(userId, ClaimResult.NO_ACTIVE_PERIOD)
+        if (!lives.grantEarnedCasual(userId, cfg.rewardLives)) return respond(userId, ClaimResult.NO_ACTIVE_PERIOD)
         auditAnomalies(userId, req, v)
         return respond(userId, ClaimResult.GRANTED)
     }
@@ -82,15 +83,15 @@ class CasualClaimService(
     // "Kesulitan ≥ ambang" (ADR-0023) diuji pada DUA sumbu sekaligus: jumlah bom DAN density.
     // Satu sumbu saja bisa diakali — 40 bom di 1000 sel cuma 4% (papan sepi), sedangkan 10 bom di
     // 20 sel padat tapi sepele. Keduanya harus lolos.
-    private fun meetsThreshold(req: CasualClaimRequest): Boolean {
+    private fun meetsThreshold(req: CasualClaimRequest, cfg: CasualEarnConfig): Boolean {
         val density = req.mineCount.toDouble() / (req.gridWidth * req.gridHeight)
-        return req.mineCount >= minMines && density >= minDensity
+        return req.mineCount >= cfg.minMines && density >= cfg.minDensity
     }
 
-    private fun capReached(c: EarnCounts): ClaimResult? = when {
-        c.daily >= capDaily -> ClaimResult.CAP_DAILY
-        c.weekly >= capWeekly -> ClaimResult.CAP_WEEKLY
-        c.monthly >= capMonthly -> ClaimResult.CAP_MONTHLY
+    private fun capReached(c: EarnCounts, cfg: CasualEarnConfig): ClaimResult? = when {
+        c.daily >= cfg.capDaily -> ClaimResult.CAP_DAILY
+        c.weekly >= cfg.capWeekly -> ClaimResult.CAP_WEEKLY
+        c.monthly >= cfg.capMonthly -> ClaimResult.CAP_MONTHLY
         else -> null
     }
 

@@ -79,6 +79,12 @@ class AdminDomainTest {
                 "prize_config, message, board, level_config, run, life_ledger, purchase, period, app_user " +
                 "RESTART IDENTITY CASCADE",
         ).update()
+        // Dikembalikan, bukan di-truncate: barisnya milik migrasi V24 (`CHECK (id = 1)`), dan ada
+        // test yang menyetelnya — urutan test tak dijamin.
+        jdbc.sql(
+            "UPDATE casual_earn_config SET reward_lives = 1, cap_daily = 1, cap_weekly = 5, " +
+                "cap_monthly = 10, min_mines = 40, min_density = 0.150 WHERE id = 1",
+        ).update()
     }
 
     // ── Helper HTTP (pola AdminAuthTest) ────────────────────────────────────────────────────────
@@ -594,6 +600,45 @@ class AdminDomainTest {
 
         jdbc.sql("UPDATE prize_claim SET status = 'paid' WHERE winner_id = ?").param(w).update()
         assertEquals(200, post("/admin/api/players/$u/delete", mapOf("reason" to "permintaan pemain"), cookie).status)
+    }
+
+    // ── Ekonomi nyawa casual (ADR-0045) ─────────────────────────────────────────────────────────
+
+    @Test
+    fun `parameter earn casual disetel dari panel, dengan pagar dan jejak dari-jadi`() {
+        val bos = sesi("bos")
+        // Menggeser ekonomi semua pemain sekaligus → peran admin saja, bukan operasi harian.
+        assertEquals(403, put("/admin/api/casual-config/1", mapOf("rewardLives" to 1, "capDaily" to 1, "capWeekly" to 5, "capMonthly" to 10, "minMines" to 40, "minDensity" to 0.15), sesi("mod", AdminRole.MODERATOR)).status)
+
+        // Cap menurun = salah ketik, bukan kebijakan: yang lebih kecil akan selalu menang.
+        val menurun = put("/admin/api/casual-config/1", mapOf("rewardLives" to 1, "capDaily" to 5, "capWeekly" to 2, "capMonthly" to 10, "minMines" to 40, "minDensity" to 0.15), bos)
+        assertEquals(400, menurun.status)
+        assertTrue(menurun.body!!.contains("menaik"))
+
+        // Di atas 0,30 generator no-guess tak dijamin bisa membuat papannya (ADR-0031).
+        assertEquals(400, put("/admin/api/casual-config/1", mapOf("rewardLives" to 1, "capDaily" to 1, "capWeekly" to 5, "capMonthly" to 10, "minMines" to 40, "minDensity" to 0.5), bos).status)
+        // Cap 0 mematikan jalur nyawa gratis — lantai legal GDD §9.5.
+        assertEquals(400, put("/admin/api/casual-config/1", mapOf("rewardLives" to 1, "capDaily" to 0, "capWeekly" to 5, "capMonthly" to 10, "minMines" to 40, "minDensity" to 0.15), bos).status)
+
+        val ok = put("/admin/api/casual-config/1", mapOf("rewardLives" to 2, "capDaily" to 2, "capWeekly" to 6, "capMonthly" to 12, "minMines" to 30, "minDensity" to 0.12), bos)
+        assertEquals(200, ok.status, ok.body)
+        assertEquals(2, (json(ok.body)["capDaily"] as Number).toInt())
+
+        // Jejaknya memuat NILAI LAMA dan BARU: "kok jatah saya berkurang" adalah pertanyaan yang
+        // hanya bisa dijawab kalau perubahannya bisa dilihat, bukan cuma keadaan akhirnya.
+        // Diperiksa sebagai NILAI, bukan sebagai teks: `jsonb` mencetak dengan spasi setelah titik
+        // dua dan urutan kunci sesuka Postgres — assertion atas string akan pecah tanpa ada yang
+        // salah dengan datanya.
+        val detail = jdbc.sql("SELECT detail::text FROM audit_event WHERE event_type = 'casual_config_updated'")
+            .query(String::class.java).single()
+        val jejak = mapper.readValue(detail, Map::class.java)
+        assertEquals(1, ((jejak["dari"] as Map<*, *>)["capDaily"] as Number).toInt())
+        assertEquals(2, ((jejak["jadi"] as Map<*, *>)["capDaily"] as Number).toInt())
+        assertEquals(40, ((jejak["dari"] as Map<*, *>)["minMines"] as Number).toInt())
+        assertEquals(30, ((jejak["jadi"] as Map<*, *>)["minMines"] as Number).toInt())
+
+        // Hanya ada satu baris konfigurasi; id lain bukan "belum dibuat", melainkan tak ada.
+        assertEquals(404, get("/admin/api/casual-config/2", bos).status)
     }
 
     // ── Reset 2FA ───────────────────────────────────────────────────────────────────────────────

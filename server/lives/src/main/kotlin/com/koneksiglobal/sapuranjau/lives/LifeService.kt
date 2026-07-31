@@ -65,12 +65,18 @@ class LifeService(private val jdbc: JdbcClient) {
     // 1 FreeLife hasil menang casual (ADR-0023) — terikat periode aktif & hangus bersamanya.
     // false = tak ada periode `ACTIVE` → tak ada yang dicetak (earn hanya saat periode berjalan).
     // Cap-nya BUKAN urusan sini: kebijakan earn ada di CasualClaimService.
+    // `count` = reward per kemenangan, kini admin-config (ADR-0045); default 1 = angka ADR-0023.
     @Transactional
-    fun grantEarnedCasual(userId: Long): Boolean =
-        jdbc.sql(
+    fun grantEarnedCasual(userId: Long, count: Int = 1): Boolean {
+        require(count > 0) { "reward nyawa harus > 0" }
+        // Satu INSERT ber-`generate_series`: reward > 1 tetap satu perjalanan ke DB, dan tetap
+        // satu baris per token nyawa (ADR-0008) supaya clawback/expiry bekerja per-token.
+        return jdbc.sql(
             "INSERT INTO life_ledger (user_id, type, source, period_id, expiry) " +
-                "SELECT ?, 'free', 'earn_casual', p.id, p.ends_at FROM period p WHERE p.status = 'ACTIVE'",
-        ).param(userId).update() == 1
+                "SELECT ?, 'free', 'earn_casual', p.id, p.ends_at FROM period p, generate_series(1, ?) " +
+                "WHERE p.status = 'ACTIVE'",
+        ).params(userId, count).update() == count
+    }
 
     // PaidLife hasil pembelian terverifikasi (ADR-0011/0022) — `expiry` NULL = carry-over lintas
     // periode (ADR-0008). Satu baris per token nyawa supaya clawback bisa menyasar sisa yang belum

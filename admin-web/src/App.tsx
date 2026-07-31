@@ -10,6 +10,7 @@ import { PrizeCreate, PrizeEdit, PrizeList } from './prizes';
 import { WinnerList } from './winners';
 import { AuditList, BanList, ConsentList } from './ops';
 import { PlayerReport, SalesReport } from './reports';
+import { CasualConfigEdit, CasualConfigList } from './casualConfig';
 
 const Beranda = () => (
   <Card sx={{ mt: 2 }}>
@@ -73,6 +74,16 @@ export const App = () => (
           <Resource name="bans" options={{ label: 'Ban turnamen' }} list={BanList} />
           <Resource name="consents" options={{ label: 'Persetujuan S&K' }} list={ConsentList} />
           <Resource name="audit-events" options={{ label: 'Audit' }} list={AuditList} />
+          {/* Ekonomi nyawa: admin saja — menggeser jatah semua pemain sekaligus dan menyentuh
+              lantai legal GDD §9.5. */}
+          {permissions === 'admin' && (
+            <Resource
+              name="casual-config"
+              options={{ label: 'Ekonomi nyawa' }}
+              list={CasualConfigList}
+              edit={CasualConfigEdit}
+            />
+          )}
           {permissions === 'admin' && (
             <Resource
               name="admin-users"
