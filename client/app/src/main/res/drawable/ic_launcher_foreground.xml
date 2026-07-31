@@ -1,0 +1,46 @@
+<!-- Ikon aplikasi (T-051). Ranjau: bulatan + delapan duri TIPIS (duri setebal celahnya terbaca sebagai gerigi, bukan ranjau) — bentuk yang sama dengan bom di papan,
+     jadi ikon dan permainannya bercerita hal yang sama.
+
+     VEKTOR, bukan PNG: minSdk 26 (ADR-0014) berarti semua perangkat mendukung adaptive icon, jadi
+     tak perlu satu pun bitmap per-densitas. Karena digambar sendiri, gate ⛔ "Lisensi aset"
+     (`RELEASE` §4) juga tertutup untuk ikon ini — tak ada lisensi pihak ketiga yang perlu dilacak.
+
+     Seluruh gambar ditahan di dalam zona aman adaptive icon (lingkaran tengah 66dp dari kanvas
+     108dp): peluncur boleh memotongnya jadi lingkaran, kotak, atau squircle tanpa memakan duri. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Empat duri lurus (atas/bawah/kiri/kanan). -->
+    <path
+        android:name="duri_lurus"
+        android:fillColor="#FFFFFF"
+        android:pathData="M52,24 h4 v18 h-4 z M52,66 h4 v18 h-4 z M24,52 h18 v4 h-18 z M66,52 h18 v4 h-18 z" />
+
+    <!-- Empat duri diagonal = path yang SAMA diputar 45°, bukan koordinat kedua yang harus
+         dijaga agar tetap cocok. -->
+    <group
+        android:name="duri_diagonal"
+        android:pivotX="54"
+        android:pivotY="54"
+        android:rotation="45">
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M52,24 h4 v18 h-4 z M52,66 h4 v18 h-4 z M24,52 h18 v4 h-18 z M66,52 h18 v4 h-18 z" />
+    </group>
+
+    <!-- Badan ranjau. -->
+    <path
+        android:name="badan"
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,37 A17,17 0 1,1 53.99,37 z" />
+
+    <!-- Kilau: lubang berwarna latar, bukan putih yang lebih terang — di ikon sekecil ini beda
+         terang tak terbaca, beda warna terbaca. -->
+    <path
+        android:name="kilau"
+        android:fillColor="#0F766E"
+        android:pathData="M48,43.5 A4.5,4.5 0 1,1 47.99,43.5 z" />
+</vector>

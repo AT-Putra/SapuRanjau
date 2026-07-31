@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Latar ikon = seed merek ADR-0042 (`#0F766E`), bukan warna baru. Ditulis sebagai warna, bukan
+     drawable: latar adaptive icon yang polos memang cukup satu warna, dan gradien akan membuat
+     ikon ini bergantung pada selera yang belum pernah diputuskan. -->
+<resources>
+    <color name="ic_launcher_background">#0F766E</color>
+</resources>
